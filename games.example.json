@@ -1,0 +1,15 @@
+{
+  "example": {
+    "exe": "C:/Games/Example/example.exe",
+    "hold": "pause_key",
+    "pause_key": "p",
+    "launch": false,
+    "window_title": "Example",
+    "notes": "Arrow keys move. Enter confirms."
+  },
+  "turn-based example": {
+    "exe": "C:/Games/Chess/chess.exe",
+    "hold": "none",
+    "notes": "Click a piece, then the square to move it to."
+  }
+}
