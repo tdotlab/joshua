@@ -19,6 +19,18 @@ def client_area(hwnd):
     return (origin.x, origin.y, rect.right - rect.left, rect.bottom - rect.top)
 
 
+def dpi(hwnd):
+    """The DPI of the display showing most of a window.
+
+    Asked of the display, since a window unaware of scaling reports 96 whatever it is.
+    """
+    across, down = w.UINT(), w.UINT()
+    monitor = api.MonitorFromWindow(hwnd, api.MONITOR_DEFAULTTONEAREST)
+    if api.GetDpiForMonitor(monitor, api.MDT_EFFECTIVE_DPI, ctypes.byref(across), ctypes.byref(down)) != 0:
+        return 96
+    return across.value
+
+
 def owner(hwnd):
     pid = w.DWORD()
     api.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))

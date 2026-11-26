@@ -9,6 +9,7 @@ gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
 ntdll = ctypes.WinDLL("ntdll")
 winmm = ctypes.WinDLL("winmm")
 dwmapi = ctypes.WinDLL("dwmapi")
+shcore = ctypes.WinDLL("shcore")
 
 ULONG_PTR = ctypes.c_size_t
 
@@ -30,6 +31,8 @@ LWA_ALPHA = 0x0002
 DWMWA_EXTENDED_FRAME_BOUNDS = 9
 DWMWA_CLOAKED = 14
 SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN = 76, 77, 78, 79
+MONITOR_DEFAULTTONEAREST = 2
+MDT_EFFECTIVE_DPI = 0
 SW_RESTORE = 9
 WM_CLOSE = 0x0010
 INPUT_MOUSE = 0
@@ -145,6 +148,9 @@ GetLayeredWindowAttributes = _declare(user32, "GetLayeredWindowAttributes", w.BO
 GetSystemMetrics = _declare(user32, "GetSystemMetrics", ctypes.c_int, ctypes.c_int)
 DwmGetWindowAttribute = _declare(dwmapi, "DwmGetWindowAttribute", w.LONG, w.HWND, w.DWORD,
                                  ctypes.c_void_p, w.DWORD)
+MonitorFromWindow = _declare(user32, "MonitorFromWindow", w.HMONITOR, w.HWND, w.DWORD)
+GetDpiForMonitor = _declare(shcore, "GetDpiForMonitor", w.LONG, w.HMONITOR, ctypes.c_int, _P(w.UINT),
+                            _P(w.UINT))
 QueryPerformanceFrequency = _declare(kernel32, "QueryPerformanceFrequency", w.BOOL, _P(ctypes.c_int64))
 
 CreateCompatibleDC = _declare(gdi32, "CreateCompatibleDC", w.HDC, w.HDC)

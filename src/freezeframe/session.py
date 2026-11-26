@@ -195,7 +195,8 @@ class Session:
             warning = self.hold.hold(self._tap)
         ran = self.hold.ran_ms()
         if not self.process.alive():
-            return Result(None, played, ran, stopped or "the game exited", "the game exited", "exited")
+            # A dying game loses its window first, so any earlier reason for stopping is misleading.
+            return Result(None, played, ran, "the game exited", "the game exited", "exited")
         if not hidden and not self.hold.capture_first:
             time.sleep(COMPOSE_SECONDS)
             frame, hidden = self._photograph()
@@ -255,7 +256,8 @@ class Session:
         problem = self._obstruction()
         if problem:
             return None, problem
-        frame = capture.grab(*window.client_area(self.hwnd), max_width=self.game.max_width)
+        frame = capture.grab(*window.client_area(self.hwnd), max_width=self.game.max_width,
+                             dpi=window.dpi(self.hwnd))
         # Something may have popped up while the picture was being taken.
         problem = self._obstruction()
         if problem:

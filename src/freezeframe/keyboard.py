@@ -6,7 +6,7 @@ from ctypes import wintypes as w
 
 from . import FreezeframeError
 from . import win32 as api
-from .timeline import KEYS
+from .timeline import KEYS, VIRTUAL_KEYS
 
 _SLICE = 0.01
 
@@ -39,13 +39,14 @@ def _send(*events):
 
 def key_event(name, down):
     scan, extended = KEYS[name]
-    flags = api.KEYEVENTF_SCANCODE
+    virtual = VIRTUAL_KEYS.get(name, 0)
+    flags = 0 if virtual else api.KEYEVENTF_SCANCODE
     if extended:
         flags |= api.KEYEVENTF_EXTENDEDKEY
     if not down:
         flags |= api.KEYEVENTF_KEYUP
     event = api.INPUT(type=api.INPUT_KEYBOARD)
-    event.ki = api.KEYBDINPUT(0, scan, flags, 0, 0)
+    event.ki = api.KEYBDINPUT(virtual, scan, flags, 0, 0)
     return event
 
 

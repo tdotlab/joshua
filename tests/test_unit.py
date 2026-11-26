@@ -78,6 +78,16 @@ class PlayerTests(unittest.TestCase):
                 timeline.parse([{"ms": 20, "keys": ["w"], "buttons": ["left"]}]))
         self.assertEqual([up for _, up in self.releases()], [False, True])
 
+    def test_the_pause_key_is_sent_as_a_virtual_key(self):
+        # Pause has no usable single scan code: scan 0x45 on its own reads as Num Lock.
+        self.player().play(timeline.parse([{"ms": 20, "keys": ["alt", "pause"]}]))
+        pause = [e.ki for e in self.sent if e.ki.wVk]
+        self.assertEqual([k.wVk for k in pause], [0x13, 0x13])
+        self.assertEqual([k.wScan for k in pause], [0x45, 0x45])
+        self.assertEqual([k.dwFlags for k in pause], [0, 0x0002])
+        alt = [e.ki for e in self.sent if not e.ki.wVk]
+        self.assertEqual([k.dwFlags for k in alt], [0x0008, 0x000A])
+
     def test_keeps_a_key_held_across_segments(self):
         self.player().play(timeline.parse([{"ms": 10, "keys": ["w"]}, {"ms": 10, "keys": ["w", "a"]}]))
         scans = self.releases()
@@ -105,8 +115,48 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(capture.scaled_size(1920, 1080, 1280), (1280, 720))
         self.assertEqual(capture.scaled_size(640, 480, 1280), (640, 480))
 
+    def test_rounded_corners_show_nothing_from_behind_the_window(self):
+        pixels = bytearray(b"\xff") * (32 * 24 * 4)
+        capture.blacken_corners(pixels, 32, 24, 8)
+
+        def lit(x, y):
+            return any(pixels[(y * 32 + x) * 4:(y * 32 + x) * 4 + 3])
+
+        # Windows 11 at 100% scaling: the pixels seen showing through, seven in from each side.
+        for x, y in ((0, 23), (6, 23), (0, 17), (31, 23), (25, 23), (0, 0), (31, 0)):
+            self.assertFalse(lit(x, y), (x, y))
+        for x, y in ((16, 12), (8, 23), (0, 15), (4, 19), (31, 8)):
+            self.assertTrue(lit(x, y), (x, y))
+
+    def test_no_radius_leaves_the_picture_alone(self):
+        pixels = bytearray(b"\xff") * (8 * 8 * 4)
+        capture.blacken_corners(pixels, 8, 8, 0)
+        self.assertEqual(pixels, bytearray(b"\xff") * (8 * 8 * 4))
+
+    def test_the_corner_grows_with_display_scaling_and_shrinks_with_the_picture(self):
+        self.assertEqual(capture.corner_radius(96, 1.0), 8)
+        self.assertEqual(capture.corner_radius(144, 1.0), 12)
+        self.assertEqual(capture.corner_radius(96, 0.5), 5)   # halved, plus one for blended edges
+
 
 class SessionTests(unittest.TestCase):
+    def test_screenshots_are_taken_with_the_corners_masked(self):
+        session = Session.__new__(Session)
+        session.hwnd = 1
+        session.game = game(max_width=640)
+        asked = {}
+
+        def grab(*area, **options):
+            asked.update(options, area=area)
+            return frame(b"x")
+
+        with mock.patch.object(session, "_obstruction", lambda: None), \
+                mock.patch("freezeframe.window.client_area", lambda _: (1, 2, 3, 4)), \
+                mock.patch("freezeframe.window.dpi", lambda _: 144), \
+                mock.patch("freezeframe.capture.grab", grab):
+            session._photograph()
+        self.assertEqual(asked, {"area": (1, 2, 3, 4), "max_width": 640, "dpi": 144})
+
     def test_screenshot_points_map_to_screen_pixels(self):
         session = Session.__new__(Session)
         session.hwnd = 1
@@ -275,6 +325,14 @@ class SessionStepTests(unittest.TestCase):
         with mock.patch.object(session, "_focus", refuse), self.assertRaises(FreezeframeError):
             session.step([], settle_ms=0)
         self.assertEqual(self.events, ["idle", "thaw", "focus", "freeze"])
+
+    def test_a_game_that_exits_is_not_blamed_on_the_user(self):
+        session = self.make(hold="none")
+        # A dying game loses its window first, so the input guard notices that before the exit.
+        self.lost_focus_after = "w down"
+        session.process.alive.side_effect = lambda: "w up" not in self.events
+        result = session.step(timeline.parse([{"ms": 20, "keys": ["w"]}]), settle_ms=0)
+        self.assertEqual((result.state, result.stopped), ("exited", "the game exited"))
 
     def test_an_unheld_game_is_photographed_running(self):
         session = self.make(hold="none")

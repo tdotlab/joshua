@@ -33,7 +33,12 @@ KEYS = {
     "rightalt": (0x38, True), "home": (0x47, True), "up": (0x48, True), "pageup": (0x49, True),
     "left": (0x4B, True), "right": (0x4D, True), "end": (0x4F, True), "down": (0x50, True),
     "pagedown": (0x51, True), "insert": (0x52, True), "delete": (0x53, True),
+    "pause": (0x45, False),
 }
+
+# Keys Windows only understands by virtual-key code: Pause's hardware sequence has
+# no single scan code, and 0x45 on its own reads as Num Lock.
+VIRTUAL_KEYS = {"pause": 0x13}
 
 # Combinations that would leave the game for the desktop, or trip the abort chord.
 _ALT = {"alt", "rightalt"}

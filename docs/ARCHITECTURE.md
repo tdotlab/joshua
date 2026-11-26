@@ -30,7 +30,10 @@ holds one game session at a time. `config.py` is the allowlist.
    same guard as the agent's input, so it is never sent to another window; if it
    cannot be sent, the agent is told the game is still running.
 9. Check the window order, copy the game's drawing area from the screen, check
-   again. If anything could have been in the picture, discard it.
+   again. If anything could have been in the picture, discard it. The corners are
+   blacked out: Windows 11 rounds them (8 pixels at 96 DPI), so the copy would
+   otherwise include whatever is behind, which both leaks and defeats the
+   all-black check for failed captures.
 10. For a paused game, take a second picture `pause_ms` later. If it differs, the
     game probably did not pause (or its pause screen moves), and the agent is
     warned. The pictures are compared as PNG bytes, which are identical exactly
@@ -53,6 +56,10 @@ resumed by the first press. The picture comparison in step 10 catches that, and
 was interrupted after the key went down is counted as having happened, and the
 agent is told it may not have registered. The game process is opened without the
 right to suspend it.
+
+Input is sent as scan codes, which DirectInput-era games read. `pause` is the
+exception: its hardware sequence has no single scan code, so it goes as a virtual
+key.
 
 `Freeze` suspends the process (below). `Free` does nothing; the game keeps
 running.

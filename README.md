@@ -5,9 +5,10 @@ held still while the model thinks, runs only while the model's input plays, then
 is held again and returns a screenshot. Slow reasoning stops mattering; being bad
 at the game still does.
 
-**Experimental.** The full path (window, focus, input, pause, capture) works
-against a test window of its own, but no real game has been played yet. See
-[docs/STATUS.md](docs/STATUS.md) for what is and is not verified.
+**Experimental.** Pause-key mode has played real games: two DOS games in
+DOSBox, including a 3D sword fight held still between steps. Freeze mode has never
+run against a real game. See [docs/STATUS.md](docs/STATUS.md) for what is and is
+not verified.
 
 ## Requirements
 
@@ -85,6 +86,28 @@ the game's clock stays sane because the game paused itself. The catches:
 - The pause key is only sent while the game is in front. If you take focus
   during a step, the game is left running and the agent is told.
 
+### DOSBox
+
+DOSBox has its own pause hotkey, which stops the whole emulated machine, so any
+game in it can be held without help from the game. Tried with DOSBox 0.73 and
+0.74:
+
+```json
+"daggerfall": {
+  "exe": "C:/Games/Daggerfall/DOSBox-0.74/DOSBox.exe",
+  "args": ["-noconsole", "-conf", "daggerfall.conf"],
+  "hold": "pause_key",
+  "pause_key": ["alt", "pause"],
+  "window_title": "DOSBox",
+  "startup_ms": 9000
+}
+```
+
+With `autolock=true` in the DOSBox config (set in both tested copies), the first
+click in the window captures the mouse. After that `mouse_to` does not apply:
+move with `mouse_move`, which is not one to one with screenshot pixels, so look
+where the cursor landed and correct. Tell the agent this in `notes`.
+
 **`freeze`.** Suspend the whole process. Works for any game, but suspending a
 process does not stop Windows' clocks: a thawed game sees all the thinking time as
 having passed and may skip ahead, drop its timers or jump its physics.
@@ -119,8 +142,10 @@ with anti-cheat.
 
 A segment is `{"ms": 300, "keys": ["up"], "buttons": ["left"], "mouse_to": [x, y],
 "mouse_move": [dx, dy]}`; only `ms` is required. `mouse_to` uses screenshot
-pixels, `mouse_move` is relative motion for camera control. One step is at most
-15 seconds and 60 segments.
+pixels, `mouse_move` is relative motion for camera control or a captured mouse.
+Key names include letters, digits, `up`, `enter`, `esc`, `space`, `shift`,
+`ctrl`, `alt`, `f1` to `f12` and `pause`; the full list is in
+`src/freezeframe/timeline.py`. One step is at most 15 seconds and 60 segments.
 
 ## Behavior to expect
 
@@ -132,7 +157,10 @@ pixels, `mouse_move` is relative motion for camera control. One step is at most
 - The server waits for you to be idle for two seconds before taking focus. The
   game stays held while it waits.
 - A screenshot covers the game's drawing area only, and is skipped if the game is
-  not in front or another window is over it.
+  not in front or another window is over it. The corners are blacked out, because
+  Windows 11 rounds them and the desktop shows through.
+- Windows occasionally refuses to bring a newly launched game forward. The start
+  fails, the game is closed again, and trying once more has worked.
 - With `freeze`: typing into the frozen window may be delivered when it resumes,
   Windows may mark it "Not Responding" if you click it, and if the server dies,
   Windows thaws the game.
