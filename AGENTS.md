@@ -9,11 +9,10 @@ Read [README.md](README.md), then [docs/STATUS.md](docs/STATUS.md).
 - `src/serve.py`: entry point
 - `src/joshua/`: `server` (MCP tools, stdio, whose turn it is), `network` (HTTP
   over Tailscale), `lock` (one player per PC), `session` (one game turn), `hold`
-  (pause key / freeze / none), `process` (launch, freeze, clock), `window`,
+  (pause key / freeze / none), `process` (launch, freeze), `window`,
   `keyboard`, `capture`, `timeline`, `config`, `win32` (all ctypes declarations)
-- `native/`: `jclock.c` (clock hook), `jinject.c`, `ticker.c` (test game)
 - `tests/`: `test_unit.py` and `test_network.py` are safe; `test_live.py` plays
-  `pausebox.py` with real input (opt-in); `test_clock.py` is native and opt-in
+  `pausebox.py` with real input (opt-in)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it works and why
 
 ## Commands
@@ -29,16 +28,12 @@ when the user is not at the keyboard or has agreed:
 $env:JOSHUA_LIVE = "1"; python -m unittest discover -s tests -p test_live.py -v
 ```
 
-```powershell
-.\build.ps1
-```
-
 ## Rules
 
-- Standard library only, in Python and C.
-- Ask the user before running anything that injects or suspends a process
-  (`JOSHUA_NATIVE=1`, `hook_clock`, a real game). Defender has quarantined
-  the test target; see README.md.
+- Standard library only.
+- Ask the user before running anything that suspends a process (a game with
+  `"hold": "freeze"`) or plays a real game. Antivirus software may object; see
+  README.md.
 - Never change antivirus settings, and never alter code or builds to avoid
   detection.
 - Keep the safety properties: allowlisted games only, input only to the focused
@@ -48,4 +43,3 @@ $env:JOSHUA_LIVE = "1"; python -m unittest discover -s tests -p test_live.py -v
 - Tests use their own claim name, never the real `PlayerLock()` of an in-process
   `Server`.
 - Offline single-player games only.
-- In `jclock.c`, hooks read the real clock before the offset. See ARCHITECTURE.

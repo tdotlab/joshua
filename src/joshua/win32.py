@@ -19,7 +19,6 @@ PROCESS_SUSPEND_RESUME = 0x0800
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 SYNCHRONIZE = 0x00100000
 PROCESS_STATE_ALL_ACCESS = 0x001F0001
-FILE_MAP_ALL_ACCESS = 0x000F001F
 STILL_ACTIVE = 259
 ERROR_ACCESS_DENIED = 5
 ERROR_ALREADY_EXISTS = 183
@@ -104,10 +103,6 @@ QueryFullProcessImageNameW = _declare(kernel32, "QueryFullProcessImageNameW", w.
                                       w.DWORD, w.LPWSTR, _P(w.DWORD))
 EnumProcesses = _declare(kernel32, "K32EnumProcesses", w.BOOL, _P(w.DWORD), w.DWORD, _P(w.DWORD))
 QueryPerformanceCounter = _declare(kernel32, "QueryPerformanceCounter", w.BOOL, _P(ctypes.c_int64))
-OpenFileMappingW = _declare(kernel32, "OpenFileMappingW", w.HANDLE, w.DWORD, w.BOOL, w.LPCWSTR)
-MapViewOfFile = _declare(kernel32, "MapViewOfFile", ctypes.c_void_p, w.HANDLE, w.DWORD, w.DWORD,
-                         w.DWORD, ctypes.c_size_t)
-UnmapViewOfFile = _declare(kernel32, "UnmapViewOfFile", w.BOOL, ctypes.c_void_p)
 GetTickCount = _declare(kernel32, "GetTickCount", w.DWORD)
 GetCurrentThreadId = _declare(kernel32, "GetCurrentThreadId", w.DWORD)
 

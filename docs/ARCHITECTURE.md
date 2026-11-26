@@ -3,7 +3,7 @@
 ```
 agent --MCP over stdio-----------------> server.py --> session.py --> hold / process / window / keyboard / capture
 agent --MCP over HTTP--> network.py ----^    |                                     |
-                                          lock.py                     game <-- jclock.dll (optional, freeze only)
+                                         lock.py                                 game
 ```
 
 The server speaks JSON-RPC itself and has no dependencies. It holds one game
@@ -108,26 +108,6 @@ running.
 suspend the process through a handle. When the handle closes, including when the
 server crashes or is killed, Windows resumes the game.
 
-## The clock hook (optional, freeze only)
-
-Suspension leaves `QueryPerformanceCounter`, `GetTickCount`, `GetTickCount64` and
-`timeGetTime` running. `jclock.dll` rewrites the import tables of loaded modules,
-including later ones and `GetProcAddress` lookups, so those functions return the
-real time minus the total time spent suspended. The total lives in a shared
-mapping, `Local\JoshuaClock-<pid>` (`struct JShared`, mirrored by
-`_ClockState` in `process.py`). The server adds to it only while the game is
-suspended.
-
-**Invariant:** a hook reads the real clock first and the offset second. A freeze
-can land between the two. In this order the stale reading minus the new offset is
-slightly early, and the monotonic clamp holds it. The other order returns a time
-far in the future, after which the clamp stalls the game's clock. C does not fix
-the evaluation order of operands, so each read is its own statement.
-
-`jinject launch` creates the game suspended and loads the DLL before its first
-instruction; `jinject attach` loads it into a running game. Both need the
-matching 32- or 64-bit build.
-
-Not covered: `rdtsc`, wall-clock and system-time functions, multimedia timer
-callbacks, waits and sleeps, audio device clocks, and statically linked or
-directly resolved calls that bypass the import tables.
+Nothing adjusts the game's clocks. `QueryPerformanceCounter`, `GetTickCount` and
+the other timers run on during a freeze, so a thawed game sees the whole pause as
+elapsed time.

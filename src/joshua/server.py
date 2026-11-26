@@ -249,9 +249,7 @@ class Server:
         if game.hold == "none":
             return (f"{game.name} is not held still: it keeps running while you think. That suits games that"
                     " wait for input on their own.")
-        if self.session.process.clock is None:
-            return "This game is frozen between steps. Its clock is not adjusted, so it may jump forward."
-        return "This game is frozen between steps, with its clock adjusted to hide the pauses."
+        return "This game is frozen between steps. Its clock keeps running, so it may jump forward."
 
     def tool_step(self, segments, settle_ms=100):
         session = self._require_session()

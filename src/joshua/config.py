@@ -27,7 +27,6 @@ class Game:
     pause_ms: int = 100          # how long the key is held, and how long the game gets to react
     capture: str = "after_pause"
     check_pause: bool = True     # warn if the picture keeps changing after pausing
-    hook_clock: bool = False     # injects a DLL; antivirus software may quarantine the game
     launch: bool = True          # False: only attach to a copy the user started
     steam_appid: int | None = None  # start through Steam instead of running exe
     window_title: str | None = None
@@ -128,9 +127,6 @@ def load(path=None):
         if unknown:
             raise JoshuaError(f"games.json: {name} has unknown settings {sorted(unknown)}")
         holding = _hold_settings(entry, name)
-        hook_clock = _expect(entry, "hook_clock", bool, False, name)
-        if hook_clock and holding["hold"] != "freeze":
-            raise JoshuaError(f"games.json: {name}.hook_clock only applies with \"hold\": \"freeze\"")
         exe = resolve(entry["exe"])
         cwd = _expect(entry, "cwd", str, None, name)
         args = _expect(entry, "args", list, [], name)
@@ -139,8 +135,7 @@ def load(path=None):
         launch = _expect(entry, "launch", bool, True, name)
         games[name] = Game(
             name=name, exe=exe, args=tuple(args), cwd=resolve(cwd) if cwd else exe.parent,
-            hook_clock=hook_clock, **holding,
-            launch=launch, steam_appid=_steam_appid(entry, launch, name),
+            **holding, launch=launch, steam_appid=_steam_appid(entry, launch, name),
             window_title=_expect(entry, "window_title", str, None, name),
             startup_ms=_expect(entry, "startup_ms", int, 3000, name),
             max_width=_expect(entry, "max_width", int, 1280, name),

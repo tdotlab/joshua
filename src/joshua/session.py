@@ -70,13 +70,12 @@ class Session:
         elif launched:
             if not game.launch:
                 raise JoshuaError(f"{game.name} is attach-only: ask the user to start it, then try again")
-            pid = process.launch(game.exe, game.args, game.cwd, game.hook_clock)
+            pid = process.launch(game.exe, game.args, game.cwd)
         else:
             pid = running[0]
         proc = None
         try:
-            clock = process.install_clock(pid, game.exe) if game.hook_clock else None
-            proc = process.GameProcess(pid, clock, freezable=game.hold == "freeze")
+            proc = process.GameProcess(pid, freezable=game.hold == "freeze")
             session = cls(game, proc, launched)
             session._wait_for_window()
             if launched:

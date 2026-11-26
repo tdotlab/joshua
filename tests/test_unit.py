@@ -1,4 +1,4 @@
-"""Tests that launch no game, inject nothing and send no real input."""
+"""Tests that launch no game, suspend nothing and send no real input."""
 
 import io
 import json
@@ -371,19 +371,11 @@ class ProcessTests(unittest.TestCase):
         finally:
             own.close()
 
-    def test_reads_the_architecture_of_a_program(self):
-        self.assertEqual(process.architecture(sys.executable),
-                         "x64" if sys.maxsize > 2**32 else "x86")
-        with self.assertRaises(JoshuaError):
-            process.architecture(__file__)
-
-    def test_starts_a_game_without_injecting_anything(self):
+    def test_starts_a_program_in_its_folder(self):
         with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.object(process, "_run_injector") as injector:
-                process.launch(sys.executable, ["-c", "open('ran', 'w').close()"], directory, False)
-                process._started[-1].wait(30)
+            process.launch(sys.executable, ["-c", "open('ran', 'w').close()"], directory)
+            process._started[-1].wait(30)
             self.assertTrue((Path(directory) / "ran").exists())
-        injector.assert_not_called()
 
 
 class SteamStartTests(unittest.TestCase):
@@ -498,7 +490,6 @@ class ConfigTests(unittest.TestCase):
 
     def test_defaults_are_the_cautious_ones(self):
         game = self.load({"a": {"exe": "bin/a.exe", "hold": "freeze"}})["a"]
-        self.assertFalse(game.hook_clock)
         self.assertEqual(game.exe, (self.path.parent / "bin/a.exe").resolve())
         self.assertEqual(game.cwd, game.exe.parent)
 
@@ -533,7 +524,7 @@ class ConfigTests(unittest.TestCase):
                       {**pausing, "pause_key": ["ctrl", "alt", "f12"]}, {**pausing, "pause_key": 5},
                       {**pausing, "pause_key": "p", "pause_ms": 5},
                       {**pausing, "pause_key": "p", "capture": "never"},
-                      {**pausing, "pause_key": "p", "hook_clock": True},
+                      {**pausing, "pause_key": "p", "capture": 1},
                       {"exe": "a.exe", "hold": "freeze", "pause_key": "p"},
                       {"exe": "a.exe", "hold": "none", "check_pause": False}):
             with self.subTest(entry=entry), self.assertRaises(JoshuaError):
@@ -557,7 +548,7 @@ class FakeSession:
     def __init__(self, game):
         self.game = game
         self.frame = capture.Frame(b"png", 4, 3, 4, 3, False)
-        self.process = mock.Mock(clock=None)
+        self.process = mock.Mock()
         self.process.alive.return_value = True
 
     @classmethod

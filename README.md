@@ -16,12 +16,19 @@ and is not verified.
 - Windows 11, in a logged-in desktop session (the game takes screen and focus).
   Only `"hold": "freeze"` uses Windows 11 features; Windows 10 is untested.
 - Python 3.10 or newer (only 3.13 has been tried); no packages
-- Visual Studio Build Tools with C++, only for the optional clock hook
 
 ## Setup
 
-Copy `games.example.json` to `games.json` and list the games the agent may play.
-Then register the server with your MCP client, using the real path.
+There is nothing to install or build. Get the code:
+
+```powershell
+git clone https://github.com/tdotlab/joshua.git
+```
+
+In the `joshua` folder, copy `games.example.json` to `games.json` and replace the
+examples with the games the agent may play. Each entry says how the game is
+[held still](#holding-the-game-still); for most games that means naming its pause
+key. Then register the server with your MCP client, using the real path.
 
 Claude Code:
 
@@ -123,8 +130,6 @@ With `"hold": "pause_key"` only:
 | `pause_ms` | `100` | How long the key is held, and how long the game then gets to react (20 to 2000). |
 | `capture` | `after_pause` | `before_pause` takes the screenshot just before pausing, for games whose pause screen hides the action. |
 | `check_pause` | `true` | Warn the agent if the picture keeps changing after pausing. Turn off for games with an animated pause screen, or with a live frame counter drawn over them. |
-
-With `"hold": "freeze"` only: `hook_clock` (default `false`), described below.
 
 ### Steam games
 
@@ -239,19 +244,16 @@ click in the window captures the mouse. After that `mouse_to` does not apply:
 move with `mouse_move`, which is not one to one with screenshot pixels, so look
 where the cursor landed and correct. Tell the agent this in `notes`.
 
-**`freeze`.** Suspend the whole process. Works for any game, but suspending a
-process does not stop Windows' clocks: a thawed game sees all the thinking time as
-having passed and may skip ahead, drop its timers or jump its physics.
-`hook_clock: true` hides the pauses from the common Windows timing functions by
-injecting `jclock.dll` (build it with `.\build.ps1` first).
+**`freeze`. Untested on real games.** Suspend the whole process. In principle it
+works for any game, but suspending a process does not stop Windows' clocks: a
+thawed game sees all the thinking time as having passed and may skip ahead, drop
+its timers or jump its physics.
 
-**Microsoft Defender has treated the hook as a threat.** On 2026-11-26, during the
-clock tests, it raised `Behavior:Win32/DefenseEvasion.A!ml` (severity Severe) and
-quarantined the *target*: the freshly built test program being injected and
-suspended. The likely cause is a behavioral heuristic reacting to injection into
-an unsigned program; that has not been confirmed. Assume it could quarantine a
-real game's executable the same way. Whether suspending without injection also
-triggers it is untested. `pause_key` exists to avoid both.
+Antivirus software may also object. During development, an experiment that
+injected a DLL into a suspended test program made Microsoft Defender quarantine
+that program. The injection code is not part of Joshua, but whether suspension
+alone can set off a similar detection is untested. `pause_key` avoids the
+question.
 
 **`none`.** The game keeps running while the agent thinks. Fine for turn-based
 games, puzzles and anything else that waits for input.
@@ -304,14 +306,14 @@ Key names include letters, digits, `up`, `enter`, `esc`, `space`, `shift`,
 python -m unittest discover -s tests -v
 ```
 
-By default the tests inject nothing, start no game and send no real input. Two
-groups are opt-in:
-
-- `JOSHUA_LIVE=1`: the real server, over stdio and over HTTP on loopback, plays
-  `tests/pausebox.py`, a small Tk window that pauses with P, using real input and
-  screenshots. It takes the screen and keyboard for about twenty seconds, so
-  leave the computer alone. Nothing is injected or suspended.
-- `JOSHUA_NATIVE=1`: the clock hook tests. They inject and suspend, and they
-  are what set off Defender.
+By default the tests start no game, suspend nothing and send no real input. One
+group is opt-in: with `JOSHUA_LIVE=1`, the real server, over stdio and over HTTP
+on loopback, plays `tests/pausebox.py`, a small Tk window that pauses with P,
+using real input and screenshots. It takes the screen and keyboard for about
+twenty seconds, so leave the computer alone. Nothing is suspended.
 
 Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## License
+
+[MIT](LICENSE).

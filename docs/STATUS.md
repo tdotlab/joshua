@@ -7,14 +7,14 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 ## Verified
 
-- Safe tests: 84 pass, 9 opt-in tests skipped. They cover step parsing, key
+- Safe tests: 83 pass, 4 opt-in tests skipped. They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
   calls replaced), PNG encoding and corner masking, config, the MCP protocol
   including the real server over stdio and HTTP, whose turn it is (takeover,
   expiry, a second process), the network server's refusals, coordinate mapping,
-  covering-window wording, starting a program without injection, and the Steam
+  covering-window wording, starting a program, and the Steam
   start (the request and the waiting, with Windows calls replaced).
-- Live tests (`JOSHUA_LIVE=1`): the real server, over stdio and over HTTP on
+- Live tests (`JOSHUA_LIVE=1`), last passed 2026-11-26: the real server, over stdio and over HTTP on
   loopback, played `tests/pausebox.py` with `"hold": "pause_key"`. Window
   finding, focus, scan-code input, the pause key, screen capture and closing all
   worked. The game did not advance between steps, and a toggle started out of
@@ -61,18 +61,12 @@ Network mode and the one-player lock are built; no other machine has connected.
     put the toggle back in step.
   - The game was killed at the end. The user's Factorio folder and its Steam
     Cloud files were unchanged.
-- Native run, interrupted by Defender: a hooked 32-bit test program thawed after
-  its controller was killed, and attaching the hook to a running program passed
-  for 32-bit and 64-bit. That was before the rename: the renamed C sources
-  compile (compile only, 32-bit and 64-bit), but `build.ps1` has not been run
-  since.
 
 ## Not verified
 
 - A connection from another machine: Windows Firewall, tailnet access rules,
   Hermes itself, and whether its model receives the screenshots as pictures.
 - A real game played from another machine.
-- The live tests have not been rerun since the Steam start was added.
 - Camera look in GTA IV, anything on foot, and a mission to its end.
 - GTA 1 (the 2002 Windows version from Steam, launched directly, before
   `steam_appid` existed) showed its menus, which were captured and driven, then crashed with
@@ -81,11 +75,8 @@ Network mode and the one-player lock are built; no other machine has connected.
   started it, with no injection or suspension. Not known: whether it also crashes
   without Joshua's input and capture, or when started from Steam. Its pause
   key is therefore still unknown.
-- `"hold": "freeze"` through the full session path, and whether antivirus
-  software reacts to suspension without injection.
-- The clock hook's main claim. The 32-bit tests failed once the test program was
-  quarantined, 64-bit results were not fully captured, and the repeated
-  freeze/thaw race test has never completed.
+- `"hold": "freeze"`: never run through the full session path or on a real game,
+  and whether antivirus software reacts to suspension is unknown.
 - Camera look with `mouse_move` in a 3D game.
 
 ## Known gaps
