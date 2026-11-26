@@ -6,9 +6,9 @@ is held again and returns a screenshot. Slow reasoning stops mattering; being ba
 at the game still does.
 
 **Experimental.** Pause-key mode has played real games: two DOS games in
-DOSBox, including a 3D sword fight held still between steps. Freeze mode has never
-run against a real game. See [docs/STATUS.md](docs/STATUS.md) for what is and is
-not verified.
+DOSBox, including a 3D sword fight, and a motorcycle ride in a GTA IV episode
+started through Steam. Freeze mode has never run against a real game. See
+[docs/STATUS.md](docs/STATUS.md) for what is and is not verified.
 
 ## Requirements
 
@@ -106,7 +106,8 @@ use. Set `JOSHUA_GAMES` to keep it elsewhere.
 | `hold` | required | How the game is held still between steps: `pause_key`, `freeze` or `none`. See below. |
 | `args` | `[]` | Command-line arguments. |
 | `cwd` | the exe's folder | Working directory. |
-| `launch` | `true` | `false`: only attach to a copy you started yourself. Use this for games started through a launcher. |
+| `launch` | `true` | `false`: only attach to a copy you started yourself. |
+| `steam_appid` | none | Start the game through Steam. See below. Cannot be combined with `args`, `cwd` or `"launch": false`. |
 | `window_title` | none | Text the window title must contain. |
 | `startup_ms` | `3000` | Time the game runs after its window appears. |
 | `max_width` | `1280` | Screenshots are scaled down to this width. |
@@ -120,9 +121,47 @@ With `"hold": "pause_key"` only:
 | `resume_key` | the pause key | For games with separate pause and resume keys. Without it, the pause key is a toggle. |
 | `pause_ms` | `100` | How long the key is held, and how long the game then gets to react (20 to 2000). |
 | `capture` | `after_pause` | `before_pause` takes the screenshot just before pausing, for games whose pause screen hides the action. |
-| `check_pause` | `true` | Warn the agent if the picture keeps changing after pausing. Turn off for games with an animated pause screen. |
+| `check_pause` | `true` | Warn the agent if the picture keeps changing after pausing. Turn off for games with an animated pause screen, or with a live frame counter drawn over them. |
 
 With `"hold": "freeze"` only: `hook_clock` (default `false`), described below.
+
+### Steam games
+
+Many Steam games refuse to run when their program is started directly. Give the
+entry a `steam_appid` (the number in the game's store page address) and let
+`exe` name the program that ends up running:
+
+```json
+"gta4": {
+  "exe": "C:/Program Files (x86)/Steam/steamapps/common/Grand Theft Auto IV/GTAIV/GTAIV.exe",
+  "steam_appid": 12210,
+  "hold": "pause_key",
+  "pause_key": "esc",
+  "pause_ms": 500,
+  "capture": "before_pause",
+  "check_pause": false
+}
+```
+
+That is what GTA IV: The Complete Edition was tried with. Its pause menu covers
+the action and fades in, hence the capture and timing settings. It also needs to
+run in a window: the tried setup was a `commandline.txt` beside `GTAIV.exe` with
+the lines `-windowed`, `-width 1280` and `-height 720`. Esc is its pause key
+only during play, so reach the game's menus with a second entry for it that has
+`"hold": "none"`, then `end_session` and start the paused entry.
+
+If that program is not already running, Joshua asks Steam to start the game,
+waits up to four minutes for the program to show a window, then lets it run for
+`startup_ms`. Anything Steam or a publisher's launcher asks (sign-in, updates,
+terms, which version to start) is yours to answer. If the wait runs out or the
+first step fails, the game is left running and calling `start_game` again
+attaches to it; `end_session` can then no longer close it. Launch options go in
+Steam's own settings for the game.
+
+A slow launcher can outlast an MCP client's tool timeout (GTA IV took about
+three minutes). The client then does not see the result: raise the timeout (in
+Codex, `tool_timeout_sec`, 60 seconds by default), or start the game yourself
+first.
 
 ## Holding the game still
 

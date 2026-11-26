@@ -9,6 +9,15 @@ agent --MCP over HTTP--> network.py ----^    |                                  
 The server speaks JSON-RPC itself and has no dependencies. It holds one game
 session at a time. `config.py` is the allowlist.
 
+## Starting through Steam
+
+With `steam_appid`, `process.open_steam` hands `steam://rungameid/<id>` to
+`explorer.exe`, so Steam and the game are not children of this program and do not
+end with the agent's session. `session.py` then waits for exactly one process of
+the allowlisted `exe` to show a window, which skips Steam, publisher launchers
+and their helpers. Joshua never kills a game that arrived this way: it took
+minutes to start, and attaching to it is cheaper than starting again.
+
 ## One player
 
 `lock.py` is a claim shared by every Joshua process in the Windows sign-in: a

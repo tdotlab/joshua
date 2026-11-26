@@ -10,6 +10,8 @@ from . import win32 as api
 IDLE_BEFORE_TAKING_FOCUS_MS = 2000
 IDLE_WAIT_SECONDS = 15
 COMPOSE_SECONDS = 0.08
+STEAM_WAIT_SECONDS = 240  # Steam, then perhaps a publisher's launcher, then the game
+STEAM_POLL_SECONDS = 1
 
 STILL_RUNNING = ("the picture kept changing after the game was paused, so it may still be running (or its"
                  " pause screen is animated). If it is running, call repause.")
@@ -38,6 +40,22 @@ class Session:
 
     # -- starting and stopping -------------------------------------------------
 
+    @staticmethod
+    def _start_through_steam(game):
+        """Ask Steam for the game, and return its process id once it shows a window."""
+        process.open_steam(game.steam_appid)
+        deadline = time.monotonic() + STEAM_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            # A launcher may start the program more than once; the one with a window is the game.
+            showing = [pid for pid in process.find_running(game.exe) if window.find(pid, game.window_title)]
+            if len(showing) == 1:
+                return showing[0]
+            time.sleep(STEAM_POLL_SECONDS)
+        raise JoshuaError(f"Steam was asked to start {game.name}, but no window from {game.exe.name} appeared"
+                          f" within {STEAM_WAIT_SECONDS} s. It may still be loading, or Steam or the game's"
+                          " launcher may be waiting for the user (sign-in, update, terms). Ask them to check,"
+                          " then call start_game again. Do not retry in a loop.")
+
     @classmethod
     def start(cls, game, settle_ms=500):
         if not game.exe.is_file():
@@ -46,7 +64,10 @@ class Session:
         if len(running) > 1:
             raise JoshuaError(f"{len(running)} copies of {game.name} are running; close all but one")
         launched = not running
-        if launched:
+        through_steam = launched and game.steam_appid is not None
+        if through_steam:
+            pid = cls._start_through_steam(game)
+        elif launched:
             if not game.launch:
                 raise JoshuaError(f"{game.name} is attach-only: ask the user to start it, then try again")
             pid = process.launch(game.exe, game.args, game.cwd, game.hook_clock)
@@ -61,12 +82,16 @@ class Session:
             if launched:
                 time.sleep(game.startup_ms / 1000)
             result = session.step([], settle_ms=settle_ms)
-        except BaseException:
-            # A launch that failed should not leave an orphaned game behind.
-            if launched:
+        except BaseException as error:
+            # A launch that failed should not leave an orphaned game behind. A game that
+            # came through Steam was slow to start and can be attached to, so it stays.
+            if launched and not through_steam:
                 process.kill(pid)
             if proc:
                 proc.close()
+            if through_steam and isinstance(error, JoshuaError):
+                raise JoshuaError(f"{error} {game.name} was left running; call start_game again to attach to"
+                                  " it.") from None
             raise
         return session, result
 
@@ -74,8 +99,8 @@ class Session:
         deadline = time.monotonic() + patience
         while time.monotonic() < deadline:
             if not self.process.alive():
-                raise JoshuaError("the game exited while starting. Launchers that hand off to another"
-                                       " program need \"launch\": false in games.json.")
+                raise JoshuaError("the game exited while starting. Games that a launcher starts need"
+                                  " \"steam_appid\" or \"launch\": false in games.json.")
             self.hwnd = window.find(self.process.pid, self.game.window_title)
             if self.hwnd:
                 return
@@ -89,7 +114,8 @@ class Session:
             return "the game had already exited"
         if close_game and not self.launched:
             self.process.close()
-            return f"the game was started by the user, so it was left open: {self.hold.letting_go()}"
+            return ("the game was already running when this session began, so it was left open:"
+                    f" {self.hold.letting_go()}")
         if close_game:
             self.process.thaw()
             if self.hwnd:
@@ -190,6 +216,8 @@ class Session:
                     hidden = f"the game is not fully visible: {cover}"
                 elif self.hold.capture_first:
                     frame, hidden = self._photograph()
+            elif self.hold.capture_first:
+                hidden = "the game is not in front"
         finally:
             # Held on every path, so a failed step never leaves the game running if that can be helped.
             warning = self.hold.hold(self._tap)

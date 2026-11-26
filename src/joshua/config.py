@@ -29,6 +29,7 @@ class Game:
     check_pause: bool = True     # warn if the picture keeps changing after pausing
     hook_clock: bool = False     # injects a DLL; antivirus software may quarantine the game
     launch: bool = True          # False: only attach to a copy the user started
+    steam_appid: int | None = None  # start through Steam instead of running exe
     window_title: str | None = None
     startup_ms: int = 3000
     max_width: int = 1280
@@ -85,6 +86,22 @@ def _hold_settings(entry, name):
             "check_pause": _expect(entry, "check_pause", bool, True, name)}
 
 
+def _steam_appid(entry, launch, name):
+    appid = _expect(entry, "steam_appid", int, None, name)
+    if appid is None:
+        return None
+    if appid <= 0:
+        raise JoshuaError(f"games.json: {name}.steam_appid must be a positive number")
+    if not launch:
+        raise JoshuaError(f"games.json: {name}.steam_appid starts the game, so it cannot be combined with"
+                          " \"launch\": false")
+    for key in ("args", "cwd"):
+        if key in entry:
+            raise JoshuaError(f"games.json: {name}.{key} does not apply with steam_appid: Steam starts the game,"
+                              " so set launch options in Steam")
+    return appid
+
+
 def load(path=None):
     """Read the allowlist. It is re-read on every use, so edits apply immediately."""
     path = Path(path) if path else config_path()
@@ -119,10 +136,11 @@ def load(path=None):
         args = _expect(entry, "args", list, [], name)
         if not all(isinstance(item, str) for item in args):
             raise JoshuaError(f"games.json: {name}.args must be strings")
+        launch = _expect(entry, "launch", bool, True, name)
         games[name] = Game(
             name=name, exe=exe, args=tuple(args), cwd=resolve(cwd) if cwd else exe.parent,
             hook_clock=hook_clock, **holding,
-            launch=_expect(entry, "launch", bool, True, name),
+            launch=launch, steam_appid=_steam_appid(entry, launch, name),
             window_title=_expect(entry, "window_title", str, None, name),
             startup_ms=_expect(entry, "startup_ms", int, 3000, name),
             max_width=_expect(entry, "max_width", int, 1280, name),

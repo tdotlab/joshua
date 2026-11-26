@@ -7,12 +7,13 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 ## Verified
 
-- Safe tests: 74 pass, 9 opt-in tests skipped. They cover step parsing, key
+- Safe tests: 84 pass, 9 opt-in tests skipped. They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
   calls replaced), PNG encoding and corner masking, config, the MCP protocol
   including the real server over stdio and HTTP, whose turn it is (takeover,
   expiry, a second process), the network server's refusals, coordinate mapping,
-  covering-window wording, and starting a program without injection.
+  covering-window wording, starting a program without injection, and the Steam
+  start (the request and the waiting, with Windows calls replaced).
 - Live tests (`JOSHUA_LIVE=1`): the real server, over stdio and over HTTP on
   loopback, played `tests/pausebox.py` with `"hold": "pause_key"`. Window
   finding, focus, scan-code input, the pause key, screen capture and closing all
@@ -32,6 +33,22 @@ Network mode and the one-player lock are built; no other machine has connected.
     paused the picture, animated water included, was identical. Walking forward
     in steps brought the player up to the opponent.
   - Both closed cleanly from the paused state.
+- GTA IV: The Complete Edition, started with `steam_appid` through the Rockstar
+  launcher (already signed in), windowed at 1280x720 by `commandline.txt`, over
+  the HTTP transport on loopback:
+  - Joshua asked Steam, waited about 170 s and attached, with Steam already
+    running. With Steam closed it took about 190 s, longer than the 180 s limit
+    then in force; a second call attached and the limit is now 240 s.
+  - Menus were captured and driven with `"hold": "none"`.
+  - The Lost and Damned loaded a new game. With Esc as the pause key, the in-game
+    clock did not move for over a minute while paused, and two driving steps
+    steered the motorcycle. The rider was not drawn in any picture; the cause is
+    unknown.
+  - The base game crashed twice while loading from Start, with its own dialog
+    "Invalid resource detected". Existing saves were not modified. Not known:
+    whether a save, the installed files or `commandline.txt` is responsible, or
+    whether it also happens without Joshua. The same `commandline.txt` was in
+    place when the episode loaded.
 - Native run, interrupted by Defender: a hooked 32-bit test program thawed after
   its controller was killed, and attaching the hook to a running program passed
   for 32-bit and 64-bit. That was before the rename: the renamed C sources
@@ -42,9 +59,11 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 - A connection from another machine: Windows Firewall, tailnet access rules,
   Hermes itself, and whether its model receives the screenshots as pictures.
-- A real game played over the network.
-- A native Windows game. GTA 1 (the 2002 Windows version from Steam, launched
-  directly) showed its menus, which were captured and driven, then crashed with
+- A real game played from another machine.
+- The live tests have not been rerun since the Steam start was added.
+- Camera look in GTA IV, anything on foot, and a mission to its end.
+- GTA 1 (the 2002 Windows version from Steam, launched directly, before
+  `steam_appid` existed) showed its menus, which were captured and driven, then crashed with
   an access violation in its own program while loading the first mission: three
   times at the same place where Windows logged it, whether Joshua or Windows
   started it, with no injection or suspension. Not known: whether it also crashes
@@ -76,5 +95,8 @@ the model says it sees.
 Let an agent play Daggerfall or Redguard from a fresh Claude Code session, and
 see what the notes and tools leave it guessing about.
 
-Find out whether GTA 1 loads a mission when the user starts it from Steam. If it
-does, attach to it (`"launch": false`) and find its pause key.
+Find out whether GTA 1 loads a mission when started with `steam_appid`. If it
+does, find its pause key.
+
+If GTA IV is wanted: add it to the local `games.json` with the settings in
+README.md, and see whether the base game still crashes without `commandline.txt`.

@@ -16,6 +16,13 @@
     "startup_ms": 9000,
     "notes": "The first click captures the mouse. After that use mouse_move and check where the cursor landed; mouse_to does not apply."
   },
+  "steam example": {
+    "exe": "C:/Program Files (x86)/Steam/steamapps/common/Example/example.exe",
+    "steam_appid": 123456,
+    "hold": "pause_key",
+    "pause_key": "esc",
+    "notes": "Esc opens the menu, which pauses the game."
+  },
   "turn-based example": {
     "exe": "C:/Games/Chess/chess.exe",
     "hold": "none",

@@ -336,6 +336,13 @@ class SessionStepTests(unittest.TestCase):
         result = session.step(timeline.parse([{"ms": 20, "keys": ["w"]}]), settle_ms=0)
         self.assertEqual((result.state, result.stopped), ("exited", "the game exited"))
 
+    def test_says_why_there_is_no_picture_of_an_unheld_game(self):
+        session = self.make(hold="none")
+        with mock.patch.object(window, "is_foreground", lambda _: False):
+            result = session.step([], settle_ms=0)
+        self.assertIsNone(result.frame)
+        self.assertIn("not in front", result.no_frame)
+
     def test_an_unheld_game_is_photographed_running(self):
         session = self.make(hold="none")
         result = session.step(timeline.parse([{"ms": 20, "keys": ["w"]}]), settle_ms=0)
@@ -379,6 +386,96 @@ class ProcessTests(unittest.TestCase):
         injector.assert_not_called()
 
 
+class SteamStartTests(unittest.TestCase):
+    """Starting through Steam, with Steam, the process list and the windows replaced."""
+
+    def setUp(self):
+        self.running = []     # what each look at the process list finds; the last answer repeats
+        self.windows = {}     # pid -> window handle
+        self.proc = mock.Mock(pid=42)
+        self.proc.alive.return_value = True
+
+        def find_running(_):
+            return list(self.running.pop(0) if len(self.running) > 1 else (self.running or [[]])[0])
+
+        self.steam = self.patch(process, "open_steam", mock.Mock())
+        self.launch = self.patch(process, "launch", mock.Mock(return_value=7))
+        self.kill = self.patch(process, "kill", mock.Mock())
+        self.opened = self.patch(process, "GameProcess", mock.Mock(return_value=self.proc))
+        self.patch(process, "find_running", find_running)
+        self.patch(window, "find", lambda pid, _: self.windows.get(pid))
+        self.patch(session_module, "STEAM_POLL_SECONDS", 0)
+        self.step = self.patch(Session, "step", mock.Mock(return_value=Result(None, 0, 0)))
+
+    def patch(self, target, name, value):
+        patcher = mock.patch.object(target, name, value)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return value
+
+    def start(self, **settings):
+        listed = config.Game("toy", Path(sys.executable), startup_ms=0, steam_appid=12210, **settings)
+        return Session.start(listed)
+
+    def test_asks_steam_and_waits_for_a_window(self):
+        # Not running, then not yet there, then a process without a window, then the game.
+        self.running = [[], [], [41], [42]]
+        self.windows = {42: 1}
+        session, _ = self.start()
+        self.steam.assert_called_once_with(12210)
+        self.launch.assert_not_called()
+        self.assertEqual(self.opened.call_args.args[0], 42)
+        self.assertTrue(session.launched)
+
+    def test_attaches_to_a_copy_that_is_already_running(self):
+        self.running = [[42]]
+        self.windows = {42: 1}
+        session, _ = self.start()
+        self.steam.assert_not_called()
+        self.assertFalse(session.launched)
+
+    def test_gives_up_without_killing_anything(self):
+        with mock.patch.object(session_module, "STEAM_WAIT_SECONDS", 0), \
+                self.assertRaisesRegex(JoshuaError, "Steam.*start_game again"):
+            self.start()
+        self.kill.assert_not_called()
+
+    def test_a_failed_first_step_leaves_a_steam_game_running(self):
+        self.running = [[], [42]]
+        self.windows = {42: 1}
+        self.step.side_effect = JoshuaError("no focus.")
+        with self.assertRaisesRegex(JoshuaError, "no focus.*left running"):
+            self.start()
+        self.kill.assert_not_called()
+        self.proc.close.assert_called_once_with()
+
+    def test_a_failed_first_step_still_closes_a_game_started_directly(self):
+        self.windows = {7: 1}
+        self.step.side_effect = JoshuaError("no focus.")
+        with self.assertRaises(JoshuaError):
+            Session.start(config.Game("toy", Path(sys.executable), startup_ms=0))
+        self.kill.assert_called_once_with(7)
+        self.steam.assert_not_called()
+
+
+class SteamRequestTests(unittest.TestCase):
+    def test_hands_the_request_to_the_windows_shell(self):
+        with mock.patch.object(process, "_steam_registered", return_value=True), \
+                mock.patch.object(process.subprocess, "Popen") as popen:
+            process.open_steam(12210)
+        command = popen.call_args.args[0]
+        self.assertEqual(Path(command[0]).name.lower(), "explorer.exe")
+        self.assertTrue(Path(command[0]).is_absolute())
+        self.assertEqual(command[1:], ["steam://rungameid/12210"])
+
+    def test_says_when_steam_is_not_there(self):
+        with mock.patch.object(process, "_steam_registered", return_value=False), \
+                mock.patch.object(process.subprocess, "Popen") as popen, \
+                self.assertRaisesRegex(JoshuaError, "Steam"):
+            process.open_steam(12210)
+        popen.assert_not_called()
+
+
 class PrivacyTests(unittest.TestCase):
     def test_a_covering_window_is_not_named(self):
         other, mine = 7, 1
@@ -413,6 +510,18 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual((games["a"].pause_ms, games["a"].capture), (100, "after_pause"))
         self.assertEqual(games["b"].pause_key, ("ctrl", "p"))
         self.assertEqual(games["b"].resume_key, ("f6",))
+
+    def test_reads_a_steam_app_id(self):
+        game = self.load({"a": {"exe": "a.exe", "hold": "none", "steam_appid": 12210}})["a"]
+        self.assertEqual(game.steam_appid, 12210)
+        self.assertIsNone(self.load({"a": {"exe": "a.exe", "hold": "none"}})["a"].steam_appid)
+
+    def test_rejects_what_steam_cannot_honour(self):
+        steam = {"exe": "a.exe", "hold": "none", "steam_appid": 12210}
+        for change in ({"steam_appid": "12210"}, {"steam_appid": True}, {"steam_appid": 0},
+                       {"steam_appid": -1}, {"launch": False}, {"args": ["-windowed"]}, {"cwd": "."}):
+            with self.subTest(change=change), self.assertRaisesRegex(JoshuaError, "a\\."):
+                self.load({"a": {**steam, **change}})
 
     def test_rejects_mistakes(self):
         pausing = {"exe": "a.exe", "hold": "pause_key"}

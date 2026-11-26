@@ -4,6 +4,7 @@ import ctypes
 import os
 import struct
 import subprocess
+import winreg
 from ctypes import wintypes as w
 from pathlib import Path
 
@@ -99,6 +100,30 @@ def launch(exe, args, cwd, hook_clock):
     arch = architecture(exe)
     command = subprocess.list2cmdline([exe, *args])
     return _run_injector(arch, "launch", _native(arch, "jclock.dll"), str(cwd), exe, command)
+
+
+def _steam_registered():
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"steam\shell\open\command"):
+            return True
+    except OSError:
+        return False
+
+
+def open_steam(appid):
+    """Ask Steam to start a game.
+
+    The request goes through the Windows shell, so that Steam and the game are not
+    children of this program and do not end with it.
+    """
+    if not _steam_registered():
+        raise JoshuaError("Steam is not installed for this user: nothing handles steam: links")
+    explorer = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "explorer.exe")
+    try:
+        _started.append(subprocess.Popen([explorer, f"steam://rungameid/{int(appid)}"], stdin=subprocess.DEVNULL,
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    except OSError as error:
+        raise JoshuaError(f"could not ask Steam to start the game: {error}") from None
 
 
 def kill(pid):
