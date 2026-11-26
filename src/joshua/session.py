@@ -3,7 +3,7 @@
 import time
 from dataclasses import dataclass
 
-from . import FreezeframeError
+from . import JoshuaError
 from . import capture, hold, keyboard, process, timeline, window
 from . import win32 as api
 
@@ -41,14 +41,14 @@ class Session:
     @classmethod
     def start(cls, game, settle_ms=500):
         if not game.exe.is_file():
-            raise FreezeframeError(f"{game.exe} does not exist; fix games.json")
+            raise JoshuaError(f"{game.exe} does not exist; fix games.json")
         running = process.find_running(game.exe)
         if len(running) > 1:
-            raise FreezeframeError(f"{len(running)} copies of {game.name} are running; close all but one")
+            raise JoshuaError(f"{len(running)} copies of {game.name} are running; close all but one")
         launched = not running
         if launched:
             if not game.launch:
-                raise FreezeframeError(f"{game.name} is attach-only: ask the user to start it, then try again")
+                raise JoshuaError(f"{game.name} is attach-only: ask the user to start it, then try again")
             pid = process.launch(game.exe, game.args, game.cwd, game.hook_clock)
         else:
             pid = running[0]
@@ -74,13 +74,13 @@ class Session:
         deadline = time.monotonic() + patience
         while time.monotonic() < deadline:
             if not self.process.alive():
-                raise FreezeframeError("the game exited while starting. Launchers that hand off to another"
+                raise JoshuaError("the game exited while starting. Launchers that hand off to another"
                                        " program need \"launch\": false in games.json.")
             self.hwnd = window.find(self.process.pid, self.game.window_title)
             if self.hwnd:
                 return
             time.sleep(0.1)
-        raise FreezeframeError("the game opened no visible window")
+        raise JoshuaError("the game opened no visible window")
 
     def close(self, close_game=False):
         """Let go of the game, leaving it running (or paused) unless asked to close it."""
@@ -119,10 +119,10 @@ class Session:
     def _to_screen(self, point):
         area = window.client_area(self.hwnd)
         if not self.frame or not area:
-            raise FreezeframeError("take a screenshot before using mouse_to")
+            raise JoshuaError("take a screenshot before using mouse_to")
         x, y = point
         if not (0 <= x < self.frame.width and 0 <= y < self.frame.height):
-            raise FreezeframeError(f"mouse_to {list(point)} is outside the {self.frame.width}x"
+            raise JoshuaError(f"mouse_to {list(point)} is outside the {self.frame.width}x"
                                    f"{self.frame.height} screenshot")
         left, top, width, height = area
         return (left + round((x + 0.5) * width / self.frame.width - 0.5),
@@ -145,7 +145,7 @@ class Session:
             if idle is None or idle >= IDLE_BEFORE_TAKING_FOCUS_MS:
                 return
             if time.monotonic() > deadline:
-                raise FreezeframeError("the user is using the computer, so the game was not brought forward."
+                raise JoshuaError("the user is using the computer, so the game was not brought forward."
                                        " Try again later, or ask them to click the game window.")
             time.sleep(0.1)
 
@@ -153,7 +153,7 @@ class Session:
         if window.is_foreground(self.process.pid):
             return
         if not window.focus(self.hwnd, self.process.pid, lambda: keyboard.nudge(self.activity)):
-            raise FreezeframeError("Windows would not bring the game forward. Ask the user to click the game"
+            raise JoshuaError("Windows would not bring the game forward. Ask the user to click the game"
                                    " window, then try again.")
 
     def _tap(self, keys):
@@ -170,7 +170,7 @@ class Session:
     def step(self, segments, settle_ms=100):
         """Let the game run, play the segments, hold it still again and photograph it."""
         if not self.process.alive():
-            raise FreezeframeError("the game is no longer running")
+            raise JoshuaError("the game is no longer running")
         self.hold.check(segments)
         self.hwnd = window.find(self.process.pid, self.game.window_title) or self.hwnd
         self._wait_until_idle()
@@ -212,9 +212,9 @@ class Session:
         Returns (whether it was pressed, Result).
         """
         if self.hold.kind != "pause_key":
-            raise FreezeframeError("repause only applies to games held with their own pause key")
+            raise JoshuaError("repause only applies to games held with their own pause key")
         if not self.process.alive():
-            raise FreezeframeError("the game is no longer running")
+            raise JoshuaError("the game is no longer running")
         self.hwnd = window.find(self.process.pid, self.game.window_title) or self.hwnd
         self._wait_until_idle()
         self._focus()

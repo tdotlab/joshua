@@ -8,7 +8,7 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "src"))
 
-from freezeframe import process  # noqa: E402
+from joshua import process  # noqa: E402
 
 BUILD = PROJECT / "build"
 ARCHITECTURES = ("x86", "x64")
@@ -16,7 +16,7 @@ ARCHITECTURES = ("x86", "x64")
 
 def built():
     return all((BUILD / arch / name).is_file()
-               for arch in ARCHITECTURES for name in ("ffclock.dll", "ffinject.exe", "ticker.exe"))
+               for arch in ARCHITECTURES for name in ("jclock.dll", "jinject.exe", "ticker.exe"))
 
 
 def ticker_exe(arch):

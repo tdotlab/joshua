@@ -13,10 +13,10 @@ from pathlib import Path
 from unittest import mock
 
 import support
-from freezeframe import FreezeframeError, capture, config, hold, keyboard, process, timeline, window
-from freezeframe import session as session_module
-from freezeframe.server import Server
-from freezeframe.session import Result, Session
+from joshua import JoshuaError, capture, config, hold, keyboard, process, timeline, window
+from joshua import session as session_module
+from joshua.server import Server
+from joshua.session import Result, Session
 
 
 class TimelineTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class TimelineTests(unittest.TestCase):
             "abort chord": [{"ms": 100, "keys": ["ctrl", "alt", "f12"]}],
         }
         for name, raw in bad.items():
-            with self.subTest(name), self.assertRaises(FreezeframeError):
+            with self.subTest(name), self.assertRaises(JoshuaError):
                 timeline.parse(raw)
 
 
@@ -73,7 +73,7 @@ class PlayerTests(unittest.TestCase):
         self.assertEqual([up for _, up in self.releases()], [False, False, True, True])
 
     def test_releases_keys_after_an_error(self):
-        with self.assertRaises(FreezeframeError):
+        with self.assertRaises(JoshuaError):
             self.player(over_game=lambda: False).play(
                 timeline.parse([{"ms": 20, "keys": ["w"], "buttons": ["left"]}]))
         self.assertEqual([up for _, up in self.releases()], [False, True])
@@ -151,9 +151,9 @@ class SessionTests(unittest.TestCase):
             return frame(b"x")
 
         with mock.patch.object(session, "_obstruction", lambda: None), \
-                mock.patch("freezeframe.window.client_area", lambda _: (1, 2, 3, 4)), \
-                mock.patch("freezeframe.window.dpi", lambda _: 144), \
-                mock.patch("freezeframe.capture.grab", grab):
+                mock.patch("joshua.window.client_area", lambda _: (1, 2, 3, 4)), \
+                mock.patch("joshua.window.dpi", lambda _: 144), \
+                mock.patch("joshua.capture.grab", grab):
             session._photograph()
         self.assertEqual(asked, {"area": (1, 2, 3, 4), "max_width": 640, "dpi": 144})
 
@@ -161,10 +161,10 @@ class SessionTests(unittest.TestCase):
         session = Session.__new__(Session)
         session.hwnd = 1
         session.frame = capture.Frame(b"", 1280, 720, 2560, 1440, False)
-        with mock.patch("freezeframe.window.client_area", lambda _: (100, 50, 2560, 1440)):
+        with mock.patch("joshua.window.client_area", lambda _: (100, 50, 2560, 1440)):
             self.assertEqual(session._to_screen((0, 0)), (100, 50))
             self.assertEqual(session._to_screen((640, 360)), (1380, 770))
-            with self.assertRaises(FreezeframeError):
+            with self.assertRaises(JoshuaError):
                 session._to_screen((1280, 0))
 
 
@@ -221,7 +221,7 @@ class PauseHoldTests(unittest.TestCase):
     def test_refuses_input_that_holds_the_pause_key(self):
         pause = hold.Pause(game(hold="pause_key", pause_key=("shift", "p")))
         pause.check(timeline.parse([{"ms": 100, "keys": ["p"]}]))  # p alone is fine
-        with self.assertRaises(FreezeframeError):
+        with self.assertRaises(JoshuaError):
             pause.check(timeline.parse([{"ms": 100, "keys": ["p", "shift", "up"]}]))
 
 
@@ -306,7 +306,7 @@ class SessionStepTests(unittest.TestCase):
 
     def test_the_pause_key_is_refused_before_anything_happens(self):
         session = self.make(hold="pause_key", pause_key=("esc",), pause_ms=20)
-        with self.assertRaises(FreezeframeError):
+        with self.assertRaises(JoshuaError):
             session.step(timeline.parse([{"ms": 20, "keys": ["esc"]}]))
         self.assertEqual(self.events, [])
 
@@ -321,8 +321,8 @@ class SessionStepTests(unittest.TestCase):
 
         def refuse():
             self.events.append("focus")
-            raise FreezeframeError("no")
-        with mock.patch.object(session, "_focus", refuse), self.assertRaises(FreezeframeError):
+            raise JoshuaError("no")
+        with mock.patch.object(session, "_focus", refuse), self.assertRaises(JoshuaError):
             session.step([], settle_ms=0)
         self.assertEqual(self.events, ["idle", "thaw", "focus", "freeze"])
 
@@ -348,7 +348,7 @@ class SessionStepTests(unittest.TestCase):
         self.assertTrue(pressed)
         self.assertEqual(self.events[:4], ["idle", "focus", "p down", "p up"])
         self.assertEqual(result.state, "paused")
-        with self.assertRaises(FreezeframeError):
+        with self.assertRaises(JoshuaError):
             self.make(hold="freeze").repause()
 
 
@@ -357,7 +357,7 @@ class ProcessTests(unittest.TestCase):
         own = process.GameProcess(os.getpid(), freezable=False)
         try:
             self.assertTrue(own.alive())
-            with self.assertRaisesRegex(FreezeframeError, "not held by freezing"):
+            with self.assertRaisesRegex(JoshuaError, "not held by freezing"):
                 own.freeze()
         finally:
             own.close()
@@ -365,7 +365,7 @@ class ProcessTests(unittest.TestCase):
     def test_reads_the_architecture_of_a_program(self):
         self.assertEqual(process.architecture(sys.executable),
                          "x64" if sys.maxsize > 2**32 else "x86")
-        with self.assertRaises(FreezeframeError):
+        with self.assertRaises(JoshuaError):
             process.architecture(__file__)
 
     def test_starts_a_game_without_injecting_anything(self):
@@ -425,15 +425,15 @@ class ConfigTests(unittest.TestCase):
                       {**pausing, "pause_key": "p", "hook_clock": True},
                       {"exe": "a.exe", "hold": "freeze", "pause_key": "p"},
                       {"exe": "a.exe", "hold": "none", "check_pause": False}):
-            with self.subTest(entry=entry), self.assertRaises(FreezeframeError):
+            with self.subTest(entry=entry), self.assertRaises(JoshuaError):
                 self.load({"a": entry})
 
     def test_a_missing_hold_explains_the_choices(self):
-        with self.assertRaisesRegex(FreezeframeError, "pause_key.*freeze.*none"):
+        with self.assertRaisesRegex(JoshuaError, "pause_key.*freeze.*none"):
             self.load({"a": {"exe": "a.exe"}})
 
     def test_explains_a_missing_file(self):
-        with self.assertRaisesRegex(FreezeframeError, "does not exist"):
+        with self.assertRaisesRegex(JoshuaError, "does not exist"):
             config.load(self.path)
 
     def test_the_example_file_loads(self):
@@ -537,7 +537,7 @@ class StdioTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, str(support.PROJECT / "src" / "serve.py")],
                 input="".join(json.dumps(m) + "\n" for m in messages), capture_output=True, text=True,
-                timeout=30, env={**os.environ, "FREEZEFRAME_GAMES": str(games)})
+                timeout=30, env={**os.environ, "JOSHUA_GAMES": str(games)})
         self.assertEqual(result.returncode, 0, result.stderr)
         replies = [json.loads(line) for line in result.stdout.splitlines()]
         self.assertEqual([r["id"] for r in replies], [1, 2])

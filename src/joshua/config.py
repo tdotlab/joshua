@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import FreezeframeError
+from . import JoshuaError
 from . import timeline
 
 PROJECT = Path(__file__).resolve().parents[2]
@@ -36,13 +36,13 @@ class Game:
 
 
 def config_path():
-    return Path(os.environ.get("FREEZEFRAME_GAMES") or PROJECT / "games.json")
+    return Path(os.environ.get("JOSHUA_GAMES") or PROJECT / "games.json")
 
 
 def _expect(entry, key, kind, default, name):
     value = entry.get(key, default)
     if value is not default and (not isinstance(value, kind) or (kind is int and isinstance(value, bool))):
-        raise FreezeframeError(f"games.json: {name}.{key} has the wrong type")
+        raise JoshuaError(f"games.json: {name}.{key} has the wrong type")
     return value
 
 
@@ -54,14 +54,14 @@ def _chord(entry, key, name):
     names = [value] if isinstance(value, str) else value
     try:
         return timeline.parse([{"ms": 100, "keys": names}])[0].keys
-    except FreezeframeError as error:
-        raise FreezeframeError(f"games.json: {name}.{key} is not usable: {error}") from None
+    except JoshuaError as error:
+        raise JoshuaError(f"games.json: {name}.{key} is not usable: {error}") from None
 
 
 def _hold_settings(entry, name):
     hold = entry.get("hold")
     if hold not in HOLDS:
-        raise FreezeframeError(
+        raise JoshuaError(
             f"games.json: {name} needs \"hold\": how to keep the game still between steps. \"pause_key\":"
             " the game pauses itself with its own key (preferred: nothing is injected or suspended)."
             " \"freeze\": suspend the process (works for any game; antivirus software may object)."
@@ -69,17 +69,17 @@ def _hold_settings(entry, name):
     if hold != "pause_key":
         stray = [key for key in _PAUSE_ONLY if key in entry]
         if stray:
-            raise FreezeframeError(f"games.json: {name}.{stray[0]} only applies with \"hold\": \"pause_key\"")
+            raise JoshuaError(f"games.json: {name}.{stray[0]} only applies with \"hold\": \"pause_key\"")
         return {"hold": hold}
     pause_key = _chord(entry, "pause_key", name)
     if not pause_key:
-        raise FreezeframeError(f"games.json: {name} uses \"hold\": \"pause_key\", so it needs \"pause_key\"")
+        raise JoshuaError(f"games.json: {name} uses \"hold\": \"pause_key\", so it needs \"pause_key\"")
     pause_ms = _expect(entry, "pause_ms", int, 100, name)
     if not 20 <= pause_ms <= 2000:
-        raise FreezeframeError(f"games.json: {name}.pause_ms must be from 20 to 2000")
+        raise JoshuaError(f"games.json: {name}.pause_ms must be from 20 to 2000")
     capture = entry.get("capture", "after_pause")
     if capture not in CAPTURES:
-        raise FreezeframeError(f"games.json: {name}.capture must be \"after_pause\" or \"before_pause\"")
+        raise JoshuaError(f"games.json: {name}.capture must be \"after_pause\" or \"before_pause\"")
     return {"hold": hold, "pause_key": pause_key, "resume_key": _chord(entry, "resume_key", name),
             "pause_ms": pause_ms, "capture": capture,
             "check_pause": _expect(entry, "check_pause", bool, True, name)}
@@ -91,12 +91,12 @@ def load(path=None):
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError:
-        raise FreezeframeError(f"{path} does not exist. The user must create it (see games.example.json);"
+        raise JoshuaError(f"{path} does not exist. The user must create it (see games.example.json);"
                                " only games listed there can be played.") from None
     except (OSError, json.JSONDecodeError) as error:
-        raise FreezeframeError(f"cannot read {path}: {error}") from None
+        raise JoshuaError(f"cannot read {path}: {error}") from None
     if not isinstance(data, dict):
-        raise FreezeframeError("games.json must be an object mapping names to games")
+        raise JoshuaError("games.json must be an object mapping names to games")
 
     def resolve(value):
         expanded = Path(os.path.expandvars(value))
@@ -106,19 +106,19 @@ def load(path=None):
     known = set(Game.__dataclass_fields__) - {"name"}
     for name, entry in data.items():
         if not isinstance(entry, dict) or not isinstance(entry.get("exe"), str):
-            raise FreezeframeError(f"games.json: {name} needs an \"exe\" path")
+            raise JoshuaError(f"games.json: {name} needs an \"exe\" path")
         unknown = set(entry) - known
         if unknown:
-            raise FreezeframeError(f"games.json: {name} has unknown settings {sorted(unknown)}")
+            raise JoshuaError(f"games.json: {name} has unknown settings {sorted(unknown)}")
         holding = _hold_settings(entry, name)
         hook_clock = _expect(entry, "hook_clock", bool, False, name)
         if hook_clock and holding["hold"] != "freeze":
-            raise FreezeframeError(f"games.json: {name}.hook_clock only applies with \"hold\": \"freeze\"")
+            raise JoshuaError(f"games.json: {name}.hook_clock only applies with \"hold\": \"freeze\"")
         exe = resolve(entry["exe"])
         cwd = _expect(entry, "cwd", str, None, name)
         args = _expect(entry, "args", list, [], name)
         if not all(isinstance(item, str) for item in args):
-            raise FreezeframeError(f"games.json: {name}.args must be strings")
+            raise JoshuaError(f"games.json: {name}.args must be strings")
         games[name] = Game(
             name=name, exe=exe, args=tuple(args), cwd=resolve(cwd) if cwd else exe.parent,
             hook_clock=hook_clock, **holding,

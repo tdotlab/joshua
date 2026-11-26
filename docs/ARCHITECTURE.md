@@ -3,7 +3,7 @@
 ```
 agent --MCP over stdio--> server.py --> session.py --> hold / process / window / keyboard / capture
                                                                   |
-                                                     game <-- ffclock.dll (optional, freeze only)
+                                                     game <-- jclock.dll (optional, freeze only)
 ```
 
 The server speaks newline-delimited JSON-RPC itself and has no dependencies. It
@@ -73,10 +73,10 @@ server crashes or is killed, Windows resumes the game.
 ## The clock hook (optional, freeze only)
 
 Suspension leaves `QueryPerformanceCounter`, `GetTickCount`, `GetTickCount64` and
-`timeGetTime` running. `ffclock.dll` rewrites the import tables of loaded modules,
+`timeGetTime` running. `jclock.dll` rewrites the import tables of loaded modules,
 including later ones and `GetProcAddress` lookups, so those functions return the
 real time minus the total time spent suspended. The total lives in a shared
-mapping, `Local\FreezeframeClock-<pid>` (`struct FFShared`, mirrored by
+mapping, `Local\JoshuaClock-<pid>` (`struct JShared`, mirrored by
 `_ClockState` in `process.py`). The server adds to it only while the game is
 suspended.
 
@@ -86,8 +86,8 @@ slightly early, and the monotonic clamp holds it. The other order returns a time
 far in the future, after which the clamp stalls the game's clock. C does not fix
 the evaluation order of operands, so each read is its own statement.
 
-`ffinject launch` creates the game suspended and loads the DLL before its first
-instruction; `ffinject attach` loads it into a running game. Both need the
+`jinject launch` creates the game suspended and loads the DLL before its first
+instruction; `jinject attach` loads it into a running game. Both need the
 matching 32- or 64-bit build.
 
 Not covered: `rdtsc`, wall-clock and system-time functions, multimedia timer

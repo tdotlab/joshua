@@ -1,6 +1,8 @@
 # Status
 
-As of 2026-11-26. Experimental, not registered with any MCP client.
+As of 2026-11-26. Experimental. Registered with Claude Code (user scope) as
+`joshua`, with a local `games.json` listing Daggerfall and Redguard. The server
+connects and lists them; no agent has played through that registration yet.
 
 ## Verified
 
@@ -9,7 +11,8 @@ As of 2026-11-26. Experimental, not registered with any MCP client.
   calls replaced), PNG encoding and corner masking, config, the MCP protocol
   including the real server over stdio, coordinate mapping, covering-window
   wording, and starting a program without injection.
-- Live tests (`FREEZEFRAME_LIVE=1`), passing with the current code: the real
+- Live tests (`JOSHUA_LIVE=1`), last passed just before the project was renamed
+  from Freezeframe (a change of names only) and not rerun since: the real
   server over stdio played `tests/pausebox.py` with `"hold": "pause_key"`. Window
   finding, focus, scan-code input, the pause key, screen capture and closing all
   worked. The game did not advance between steps, and a toggle started out of
@@ -26,16 +29,18 @@ As of 2026-11-26. Experimental, not registered with any MCP client.
   - Both closed cleanly from the paused state.
 - Native run, interrupted by Defender: a hooked 32-bit test program thawed after
   its controller was killed, and attaching the hook to a running program passed
-  for 32-bit and 64-bit.
+  for 32-bit and 64-bit. That was before the rename: the renamed C sources
+  compile (compile only, 32-bit and 64-bit), but `build.ps1` has not been run
+  since.
 
 ## Not verified
 
 - A native Windows game. GTA 1 (the 2002 Windows version from Steam, launched
   directly) showed its menus, which were captured and driven, then crashed with
   an access violation in its own program while loading the first mission: three
-  times at the same place where Windows logged it, whether Freezeframe or Windows
+  times at the same place where Windows logged it, whether Joshua or Windows
   started it, with no injection or suspension. Not known: whether it also crashes
-  without Freezeframe's input and capture, or when started from Steam. Its pause
+  without Joshua's input and capture, or when started from Steam. Its pause
   key is therefore still unknown.
 - `"hold": "freeze"` through the full session path, and whether antivirus
   software reacts to suspension without injection.
@@ -57,6 +62,8 @@ As of 2026-11-26. Experimental, not registered with any MCP client.
 
 ## Next
 
+Let an agent play Daggerfall or Redguard from a fresh Claude Code session, and
+see what the notes and tools leave it guessing about.
+
 Find out whether GTA 1 loads a mission when the user starts it from Steam. If it
-does, attach to it (`"launch": false`) and find its pause key. Then register the
-server with an MCP client and let an agent play.
+does, attach to it (`"launch": false`) and find its pause key.

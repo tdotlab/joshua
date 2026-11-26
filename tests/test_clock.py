@@ -2,7 +2,7 @@
 
 Starts real processes with hidden windows. Sends no input and takes no focus.
 
-Opt-in (FREEZEFRAME_NATIVE=1): these tests inject a DLL into a test program, and
+Opt-in (JOSHUA_NATIVE=1): these tests inject a DLL into a test program, and
 Microsoft Defender has quarantined that program as a threat. See README.md.
 """
 
@@ -14,14 +14,14 @@ import time
 import unittest
 
 import support
-from freezeframe import process
+from joshua import process
 
 PAUSE = 1.5            # seconds each game spends frozen
 LEAK_LIMIT_MS = 200    # largest time step a hooked game may see
 CONTROL_MIN_MS = 1300  # smallest time step an unhooked game must see
 
 
-@unittest.skipUnless(os.environ.get("FREEZEFRAME_NATIVE") == "1",
+@unittest.skipUnless(os.environ.get("JOSHUA_NATIVE") == "1",
                      "native tests trigger antivirus detections; see README.md")
 @unittest.skipUnless(support.built(), "run build.ps1 first")
 class ClockTests(unittest.TestCase):
@@ -120,7 +120,7 @@ class ClockTests(unittest.TestCase):
         holder = subprocess.Popen(
             [sys.executable, "-c",
              "import sys, time; sys.path.insert(0, sys.argv[1]);"
-             "from freezeframe.process import GameProcess;"
+             "from joshua.process import GameProcess;"
              "game = GameProcess(int(sys.argv[2])); game.freeze(); print('frozen', flush=True); time.sleep(60)",
              str(support.PROJECT / "src"), str(ticker.pid)],
             stdout=subprocess.PIPE, text=True)

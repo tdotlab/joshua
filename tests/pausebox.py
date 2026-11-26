@@ -16,7 +16,7 @@ state = {"paused": "--paused" in sys.argv, "ticks": 0, "x": 40, "toggles": 0}
 held = set()
 
 root = tk.Tk()
-root.title("Freezeframe pausebox")
+root.title("Joshua pausebox")
 root.resizable(False, False)
 canvas = tk.Canvas(root, width=320, height=240, bg="#101018", highlightthickness=0)
 canvas.pack()

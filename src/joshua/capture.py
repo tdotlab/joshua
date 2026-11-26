@@ -6,7 +6,7 @@ import struct
 import zlib
 from dataclasses import dataclass
 
-from . import FreezeframeError
+from . import JoshuaError
 from . import win32 as api
 
 
@@ -78,7 +78,7 @@ def grab(left, top, width, height, max_width=1280, dpi=96):
     dpi is that of the display showing it, which sets how round its corners are.
     """
     if width <= 0 or height <= 0:
-        raise FreezeframeError("the game window has no visible area")
+        raise JoshuaError("the game window has no visible area")
     out_width, out_height = scaled_size(width, height, max_width)
     screen = api.GetDC(None)
     memory = api.CreateCompatibleDC(screen)
@@ -89,13 +89,13 @@ def grab(left, top, width, height, max_width=1280, dpi=96):
         bits = ctypes.c_void_p()
         bitmap = api.CreateDIBSection(memory, ctypes.byref(info), 0, ctypes.byref(bits), None, 0)
         if not bitmap:
-            raise FreezeframeError("could not allocate the screenshot bitmap")
+            raise JoshuaError("could not allocate the screenshot bitmap")
         previous = api.SelectObject(memory, bitmap)
         api.SetStretchBltMode(memory, api.HALFTONE)
         api.SetBrushOrgEx(memory, 0, 0, None)
         if not api.StretchBlt(memory, 0, 0, out_width, out_height, screen, left, top, width, height,
                               api.SRCCOPY | api.CAPTUREBLT):
-            raise FreezeframeError("the screen could not be captured (locked or disconnected desktop?)")
+            raise JoshuaError("the screen could not be captured (locked or disconnected desktop?)")
         api.GdiFlush()
         pixels = bytearray(ctypes.string_at(bits, out_width * out_height * 4))
     finally:

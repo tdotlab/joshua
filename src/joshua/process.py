@@ -7,17 +7,17 @@ import subprocess
 from ctypes import wintypes as w
 from pathlib import Path
 
-from . import FreezeframeError
+from . import JoshuaError
 from . import win32 as api
 
 BUILD = Path(__file__).resolve().parents[2] / "build"
-CLOCK_MAGIC = 0x4B434646
+CLOCK_MAGIC = 0x4B43534A
 CLOCK_VERSION = 1
 _started = []
 
 
 class _ClockState(ctypes.Structure):
-    """Mirrors FFShared in native/ffclock.c."""
+    """Mirrors JShared in native/jclock.c."""
 
     _fields_ = [("magic", w.DWORD), ("version", w.DWORD), ("offset_qpc", ctypes.c_int64),
                 ("patched", w.LONG), ("ready", w.LONG)]
@@ -28,17 +28,17 @@ def architecture(exe):
     with open(exe, "rb") as handle:
         header = handle.read(4096)
         if header[:2] != b"MZ" or len(header) < 64:
-            raise FreezeframeError(f"{exe} is not a Windows executable")
+            raise JoshuaError(f"{exe} is not a Windows executable")
         offset = struct.unpack_from("<I", header, 0x3C)[0]
         handle.seek(offset)
         signature = handle.read(6)
     if signature[:4] != b"PE\0\0":
-        raise FreezeframeError(f"{exe} is not a 32- or 64-bit Windows program")
+        raise JoshuaError(f"{exe} is not a 32- or 64-bit Windows program")
     machine = struct.unpack_from("<H", signature, 4)[0]
     try:
         return {0x014C: "x86", 0x8664: "x64"}[machine]
     except KeyError:
-        raise FreezeframeError(f"{exe} targets an unsupported processor (0x{machine:04x})") from None
+        raise JoshuaError(f"{exe} targets an unsupported processor (0x{machine:04x})") from None
 
 
 def image_path(pid):
@@ -73,18 +73,18 @@ def find_running(exe):
 def _native(arch, name):
     path = BUILD / arch / name
     if not path.is_file():
-        raise FreezeframeError(f"{path} is missing; run build.ps1 first")
+        raise JoshuaError(f"{path} is missing; run build.ps1 first")
     return str(path)
 
 
 def _run_injector(arch, *arguments):
     result = subprocess.run(
-        [_native(arch, "ffinject.exe"), *arguments],
+        [_native(arch, "jinject.exe"), *arguments],
         stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60,
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
     if result.returncode != 0 or not result.stdout.startswith("pid="):
-        raise FreezeframeError(result.stderr.strip() or "the injector failed without a message")
+        raise JoshuaError(result.stderr.strip() or "the injector failed without a message")
     return int(result.stdout.strip()[4:])
 
 
@@ -98,7 +98,7 @@ def launch(exe, args, cwd, hook_clock):
         return game.pid
     arch = architecture(exe)
     command = subprocess.list2cmdline([exe, *args])
-    return _run_injector(arch, "launch", _native(arch, "ffclock.dll"), str(cwd), exe, command)
+    return _run_injector(arch, "launch", _native(arch, "jclock.dll"), str(cwd), exe, command)
 
 
 def kill(pid):
@@ -120,7 +120,7 @@ class Clock:
     @classmethod
     def open(cls, pid):
         """Return the clock of an already hooked process, or None."""
-        mapping = api.OpenFileMappingW(api.FILE_MAP_ALL_ACCESS, False, f"Local\\FreezeframeClock-{pid}")
+        mapping = api.OpenFileMappingW(api.FILE_MAP_ALL_ACCESS, False, f"Local\\JoshuaClock-{pid}")
         if not mapping:
             return None
         view = api.MapViewOfFile(mapping, api.FILE_MAP_ALL_ACCESS, 0, 0, ctypes.sizeof(_ClockState))
@@ -131,7 +131,7 @@ class Clock:
         state = clock._state
         if state.magic != CLOCK_MAGIC or state.version != CLOCK_VERSION or not state.ready:
             clock.close()
-            raise FreezeframeError("the game holds an incompatible or half-loaded clock hook; restart it")
+            raise JoshuaError("the game holds an incompatible or half-loaded clock hook; restart it")
         return clock
 
     @property
@@ -159,10 +159,10 @@ def install_clock(pid, exe):
     if clock:
         return clock
     arch = architecture(exe)
-    _run_injector(arch, "attach", _native(arch, "ffclock.dll"), str(pid))
+    _run_injector(arch, "attach", _native(arch, "jclock.dll"), str(pid))
     clock = Clock.open(pid)
     if not clock:
-        raise FreezeframeError("the clock hook loaded but never reported in")
+        raise JoshuaError("the clock hook loaded but never reported in")
     return clock
 
 
@@ -186,7 +186,7 @@ class GameProcess:
         if not self._handle:
             if clock:
                 clock.close()
-            raise FreezeframeError(f"cannot control process {pid}; is it running as administrator?")
+            raise JoshuaError(f"cannot control process {pid}; is it running as administrator?")
         if not freezable:
             return
         state_change = w.HANDLE()
@@ -196,7 +196,7 @@ class GameProcess:
             api.CloseHandle(self._handle)
             if clock:
                 clock.close()
-            raise FreezeframeError(f"Windows refused to create a freeze handle (0x{status & 0xFFFFFFFF:08x});"
+            raise JoshuaError(f"Windows refused to create a freeze handle (0x{status & 0xFFFFFFFF:08x});"
                                    " Windows 11 is required")
         self._state_change = state_change
 
@@ -211,11 +211,11 @@ class GameProcess:
 
     def _change(self, kind):
         if not self._state_change:
-            raise FreezeframeError("this game is not held by freezing")
+            raise JoshuaError("this game is not held by freezing")
         status = api.NtChangeProcessState(self._state_change, self._handle, kind, None, 0, 0)
         if status < 0:
             verb = "freeze" if kind == 0 else "thaw"
-            raise FreezeframeError(f"could not {verb} the game (0x{status & 0xFFFFFFFF:08x})")
+            raise JoshuaError(f"could not {verb} the game (0x{status & 0xFFFFFFFF:08x})")
 
     def freeze(self):
         if self.frozen:

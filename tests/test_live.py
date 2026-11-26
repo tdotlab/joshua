@@ -1,6 +1,6 @@
 """The real server, playing a real window with real input. Opt-in: it takes the screen and keyboard.
 
-Run with FREEZEFRAME_LIVE=1 while nobody is using the computer. The game is
+Run with JOSHUA_LIVE=1 while nobody is using the computer. The game is
 pausebox.py, a harmless Tk window that pauses with P. Nothing is injected or
 suspended: these tests use "hold": "pause_key" only.
 """
@@ -17,12 +17,12 @@ import unittest
 from pathlib import Path
 
 import support
-from freezeframe import process
+from joshua import process
 
 HERE = Path(__file__).resolve().parent
 
 
-@unittest.skipUnless(os.environ.get("FREEZEFRAME_LIVE") == "1", "takes the screen and keyboard; see README.md")
+@unittest.skipUnless(os.environ.get("JOSHUA_LIVE") == "1", "takes the screen and keyboard; see README.md")
 class LiveTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -54,7 +54,7 @@ class LiveTests(unittest.TestCase):
         self.addCleanup(log.close)
         self.server = subprocess.Popen(
             [sys.executable, str(support.PROJECT / "src" / "serve.py")], stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=log, env={**os.environ, "FREEZEFRAME_GAMES": str(games)})
+            stdout=subprocess.PIPE, stderr=log, env={**os.environ, "JOSHUA_GAMES": str(games)})
         self.rpc("initialize", {"protocolVersion": "2025-11-25"})
 
     def rpc(self, method, params):

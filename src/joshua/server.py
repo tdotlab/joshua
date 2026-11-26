@@ -5,14 +5,14 @@ import json
 import sys
 import traceback
 
-from . import FreezeframeError, __version__
+from . import JoshuaError, __version__
 from . import config, timeline
 from .session import Session
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 
 INSTRUCTIONS = (
-    "Freezeframe lets you play a Windows game turn by turn. Between steps the game is held still (paused"
+    "Joshua lets you play a Windows game turn by turn. Between steps the game is held still (paused"
     " with its own pause key, or frozen) and runs only during `step`, so there is no time pressure while you"
     " think; start_game says if a game is not held. Look at each screenshot, decide, then send a short step."
     " Start with short steps (200-500 ms) until you know how the game responds. Taps need about 80 ms to"
@@ -97,7 +97,7 @@ class Server:
 
     def _require_session(self):
         if not self.session:
-            raise FreezeframeError("no game is being played; call start_game first")
+            raise JoshuaError("no game is being played; call start_game first")
         return self.session
 
     def _describe(self, result, opening=None):
@@ -136,13 +136,13 @@ class Server:
 
     def tool_start_game(self, game):
         if self.session and self.session.process.alive():
-            raise FreezeframeError(f"already playing {self.session.game.name}; call end_session first")
+            raise JoshuaError(f"already playing {self.session.game.name}; call end_session first")
         if self.session:
             self.session.close()
             self.session = None
         games = config.load()
         if game not in games:
-            raise FreezeframeError(f"{game!r} is not listed. Allowed: {', '.join(games) or 'none'}")
+            raise JoshuaError(f"{game!r} is not listed. Allowed: {', '.join(games) or 'none'}")
         self.session, result = self._session_class.start(games[game])
         content = self._describe(result)
         if games[game].notes:
@@ -152,7 +152,7 @@ class Server:
 
     def _holding(self, game):
         if game.hold == "pause_key":
-            return (f"Freezeframe holds {game.name} still by pressing its own pause key"
+            return (f"Joshua holds {game.name} still by pressing its own pause key"
                     f" ({'+'.join(game.pause_key)}) between steps, so you cannot use that key. If screenshots"
                     " show it still running between steps, call repause.")
         if game.hold == "none":
@@ -166,7 +166,7 @@ class Server:
         session = self._require_session()
         parsed = timeline.parse(segments)
         if not isinstance(settle_ms, int) or not 0 <= settle_ms <= 3000:
-            raise FreezeframeError("settle_ms must be an integer from 0 to 3000")
+            raise JoshuaError("settle_ms must be an integer from 0 to 3000")
         return self._describe(session.step(parsed, settle_ms=settle_ms))
 
     def tool_repause(self):
@@ -177,7 +177,7 @@ class Server:
     def tool_look(self):
         session = self._require_session()
         if not session.frame:
-            raise FreezeframeError("there is no screenshot yet")
+            raise JoshuaError("there is no screenshot yet")
         return [_text("Latest screenshot; the game has not run since unless a step reported otherwise."),
                 _image(session.frame)]
 
@@ -204,13 +204,13 @@ class Server:
             raise LookupError(f"unknown tool {name!r}")
         try:
             if not isinstance(arguments, dict):
-                raise FreezeframeError("arguments must be an object")
+                raise JoshuaError("arguments must be an object")
             unknown = set(arguments) - set(schema["properties"])
             missing = set(schema.get("required", ())) - set(arguments)
             if unknown or missing:
-                raise FreezeframeError(f"bad arguments (unknown: {sorted(unknown)}, missing: {sorted(missing)})")
+                raise JoshuaError(f"bad arguments (unknown: {sorted(unknown)}, missing: {sorted(missing)})")
             return {"content": getattr(self, f"tool_{name}")(**arguments), "isError": False}
-        except FreezeframeError as error:
+        except JoshuaError as error:
             return {"content": [_text(str(error))], "isError": True}
         except Exception as error:  # report, keep serving
             traceback.print_exc(file=sys.stderr)
@@ -232,7 +232,7 @@ class Server:
             reply["result"] = {
                 "protocolVersion": asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0],
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "freezeframe", "version": __version__},
+                "serverInfo": {"name": "joshua", "version": __version__},
                 "instructions": INSTRUCTIONS,
             }
         elif method == "ping":

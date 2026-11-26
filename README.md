@@ -1,4 +1,4 @@
-# Freezeframe
+# Joshua
 
 An MCP server that lets an agent play a Windows game turn by turn. The game is
 held still while the model thinks, runs only while the model's input plays, then
@@ -25,13 +25,13 @@ Then register the server with your MCP client, using the real path.
 Claude Code:
 
 ```powershell
-claude mcp add --scope user freezeframe -- python C:\path\to\Freezeframe\src\serve.py
+claude mcp add --scope user joshua -- python C:\path\to\Joshua\src\serve.py
 ```
 
 Codex:
 
 ```powershell
-codex mcp add freezeframe -- python C:\path\to\Freezeframe\src\serve.py
+codex mcp add joshua -- python C:\path\to\Joshua\src\serve.py
 ```
 
 Any other client that runs stdio MCP servers on the same machine uses the same
@@ -41,7 +41,7 @@ command.
 
 Only programs listed here can be started, attached to or controlled. The agent
 names an entry; it cannot supply paths or arguments. The file is re-read on every
-use. Set `FREEZEFRAME_GAMES` to keep it elsewhere.
+use. Set `JOSHUA_GAMES` to keep it elsewhere.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -69,7 +69,7 @@ With `"hold": "freeze"` only: `hook_clock` (default `false`), described below.
 
 ## Holding the game still
 
-**`pause_key` (preferred).** Freezeframe presses the game's own pause key: resume,
+**`pause_key` (preferred).** Joshua presses the game's own pause key: resume,
 play the input, pause, take the screenshot. Nothing is injected or suspended, and
 the game's clock stays sane because the game paused itself. The catches:
 
@@ -80,7 +80,7 @@ the game's clock stays sane because the game paused itself. The catches:
 - The game runs for a moment the agent did not ask for: about `pause_ms` before
   the input and a little more after it. The reported run time includes it.
 - A toggle can get out of step, for example if you pause the game yourself before
-  the agent attaches. After pausing, Freezeframe takes a second picture
+  the agent attaches. After pausing, Joshua takes a second picture
   `pause_ms` later; if the two differ, it warns the agent, which can call
   `repause`.
 - The pause key is only sent while the game is in front. If you take focus
@@ -112,7 +112,7 @@ where the cursor landed and correct. Tell the agent this in `notes`.
 process does not stop Windows' clocks: a thawed game sees all the thinking time as
 having passed and may skip ahead, drop its timers or jump its physics.
 `hook_clock: true` hides the pauses from the common Windows timing functions by
-injecting `ffclock.dll` (build it with `.\build.ps1` first).
+injecting `jclock.dll` (build it with `.\build.ps1` first).
 
 **Microsoft Defender has treated the hook as a threat.** On 2026-11-26, during the
 clock tests, it raised `Behavior:Win32/DefenseEvasion.A!ml` (severity Severe) and
@@ -145,7 +145,7 @@ A segment is `{"ms": 300, "keys": ["up"], "buttons": ["left"], "mouse_to": [x, y
 pixels, `mouse_move` is relative motion for camera control or a captured mouse.
 Key names include letters, digits, `up`, `enter`, `esc`, `space`, `shift`,
 `ctrl`, `alt`, `f1` to `f12` and `pause`; the full list is in
-`src/freezeframe/timeline.py`. One step is at most 15 seconds and 60 segments.
+`src/joshua/timeline.py`. One step is at most 15 seconds and 60 segments.
 
 ## Behavior to expect
 
@@ -176,11 +176,11 @@ python -m unittest discover -s tests -v
 By default the tests inject nothing, start no game and send no real input. Two
 groups are opt-in:
 
-- `FREEZEFRAME_LIVE=1`: the real server plays `tests/pausebox.py`, a small Tk
+- `JOSHUA_LIVE=1`: the real server plays `tests/pausebox.py`, a small Tk
   window that pauses with P, using real input and screenshots. It takes the
   screen and keyboard for about ten seconds, so leave the computer alone. Nothing
   is injected or suspended.
-- `FREEZEFRAME_NATIVE=1`: the clock hook tests. They inject and suspend, and they
+- `JOSHUA_NATIVE=1`: the clock hook tests. They inject and suspend, and they
   are what set off Defender.
 
 Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

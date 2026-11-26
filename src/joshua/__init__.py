@@ -3,5 +3,5 @@
 __version__ = "0.1.0"
 
 
-class FreezeframeError(Exception):
+class JoshuaError(Exception):
     """A failure whose message is meant to be read by the agent or its user."""

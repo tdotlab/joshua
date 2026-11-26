@@ -1,9 +1,9 @@
 /*
- * ffinject: load ffclock into a game. Built once per architecture; the build
+ * jinject: load jclock into a game. Built once per architecture; the build
  * must match the game's bitness.
  *
- *   ffinject launch <dll> <working-dir> <exe> <command-line>
- *   ffinject attach <dll> <pid>
+ *   jinject launch <dll> <working-dir> <exe> <command-line>
+ *   jinject attach <dll> <pid>
  *
  * Prints "pid=<n>" on success.
  */
@@ -15,7 +15,7 @@
 
 static int fail(const char *what)
 {
-    fprintf(stderr, "ffinject: %s (Windows error %lu)\n", what, GetLastError());
+    fprintf(stderr, "jinject: %s (Windows error %lu)\n", what, GetLastError());
     return 1;
 }
 
@@ -46,7 +46,7 @@ static int inject(HANDLE process, const wchar_t *dll)
     CloseHandle(thread);
     VirtualFreeEx(process, remote, 0, MEM_RELEASE);
     if (!result) {
-        fprintf(stderr, "ffinject: the game could not load the clock hook\n");
+        fprintf(stderr, "jinject: the game could not load the clock hook\n");
         return 1;
     }
     return 0;
@@ -72,7 +72,7 @@ int wmain(int argc, wchar_t **argv)
             return fail("cannot start the game");
         if (!same_architecture(info.hProcess) || inject(info.hProcess, argv[2])) {
             TerminateProcess(info.hProcess, 1);
-            fprintf(stderr, "ffinject: launch abandoned\n");
+            fprintf(stderr, "jinject: launch abandoned\n");
             return 1;
         }
         ResumeThread(info.hThread);
@@ -88,7 +88,7 @@ int wmain(int argc, wchar_t **argv)
         if (!process)
             return fail("cannot open the game (is it running as administrator?)");
         if (!same_architecture(process)) {
-            fprintf(stderr, "ffinject: architecture does not match the game\n");
+            fprintf(stderr, "jinject: architecture does not match the game\n");
             return 1;
         }
         if (inject(process, argv[2]))
@@ -97,6 +97,6 @@ int wmain(int argc, wchar_t **argv)
         return 0;
     }
 
-    fprintf(stderr, "usage: ffinject launch <dll> <dir> <exe> <cmdline> | attach <dll> <pid>\n");
+    fprintf(stderr, "usage: jinject launch <dll> <dir> <exe> <cmdline> | attach <dll> <pid>\n");
     return 2;
 }

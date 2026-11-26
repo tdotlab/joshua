@@ -6,7 +6,7 @@ input is done. tap(keys) presses keys in the focused game and returns
 (pressed, problem); see Session._tap.
 """
 
-from . import FreezeframeError
+from . import JoshuaError
 from . import win32 as api
 
 
@@ -49,8 +49,8 @@ class Pause(_Timed):
         for index, segment in enumerate(segments):
             for chord in {self.pause_keys, self.resume_keys}:
                 if set(chord) <= set(segment.keys):
-                    raise FreezeframeError(
-                        f"segment {index} presses {'+'.join(chord)}, which Freezeframe uses to pause and resume"
+                    raise JoshuaError(
+                        f"segment {index} presses {'+'.join(chord)}, which Joshua uses to pause and resume"
                         " this game, so it was refused. If the game needs that key for something else, the"
                         " user can choose a different pause key in games.json.")
 

@@ -4,7 +4,7 @@ import ctypes
 import time
 from ctypes import wintypes as w
 
-from . import FreezeframeError
+from . import JoshuaError
 from . import win32 as api
 from .timeline import KEYS, VIRTUAL_KEYS
 
@@ -34,7 +34,7 @@ class UserActivity:
 def _send(*events):
     array = (api.INPUT * len(events))(*events)
     if api.SendInput(len(events), array, ctypes.sizeof(api.INPUT)) != len(events):
-        raise FreezeframeError("Windows blocked the input; is the game running as administrator?")
+        raise JoshuaError("Windows blocked the input; is the game running as administrator?")
 
 
 def key_event(name, down):
@@ -110,7 +110,7 @@ class Player:
         for button in segment.buttons:
             if button not in self._buttons:
                 if not self._over_game():
-                    raise FreezeframeError("the mouse pointer is not over the game, so no button was pressed;"
+                    raise JoshuaError("the mouse pointer is not over the game, so no button was pressed;"
                                            " set mouse_to first")
                 self._emit(mouse_event(api.MOUSE_BUTTON_FLAGS[button][0]))
                 self._buttons.append(button)

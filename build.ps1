@@ -16,8 +16,8 @@ foreach ($arch in 'x86', 'x64') {
 @echo off
 call "$vcvars" $arch >nul || exit /b 1
 cd /d "$out" || exit /b 1
-cl /nologo /O2 /W3 /MT /D_CRT_SECURE_NO_WARNINGS /LD "$root\native\ffclock.c" /Fe:ffclock.dll /link winmm.lib || exit /b 1
-cl /nologo /O2 /W3 /MT /D_CRT_SECURE_NO_WARNINGS "$root\native\ffinject.c" /Fe:ffinject.exe || exit /b 1
+cl /nologo /O2 /W3 /MT /D_CRT_SECURE_NO_WARNINGS /LD "$root\native\jclock.c" /Fe:jclock.dll /link winmm.lib || exit /b 1
+cl /nologo /O2 /W3 /MT /D_CRT_SECURE_NO_WARNINGS "$root\native\jinject.c" /Fe:jinject.exe || exit /b 1
 cl /nologo /O2 /W3 /MT /DUNICODE /D_UNICODE "$root\native\ticker.c" /Fe:ticker.exe /link user32.lib gdi32.lib winmm.lib shell32.lib || exit /b 1
 "@
     $batch = Join-Path $out 'compile.cmd'

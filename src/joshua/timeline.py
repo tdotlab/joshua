@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from . import FreezeframeError
+from . import JoshuaError
 
 MAX_SEGMENTS = 60
 MAX_TOTAL_MS = 15000
@@ -60,13 +60,13 @@ def _names(value, allowed, field, index):
     if value is None:
         return ()
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise FreezeframeError(f"segment {index}: {field} must be a list of names")
+        raise JoshuaError(f"segment {index}: {field} must be a list of names")
     names = []
     for item in value:
         name = item.strip().lower()
         if name not in allowed:
             hint = ", ".join(sorted(allowed))
-            raise FreezeframeError(f"segment {index}: unknown name {item!r} in {field}. Known: {hint}")
+            raise JoshuaError(f"segment {index}: unknown name {item!r} in {field}. Known: {hint}")
         if name not in names:
             names.append(name)
     return tuple(names)
@@ -77,35 +77,35 @@ def _pair(value, field, index):
         return None
     if (not isinstance(value, list) or len(value) != 2
             or not all(isinstance(n, (int, float)) and not isinstance(n, bool) for n in value)):
-        raise FreezeframeError(f"segment {index}: {field} must be [x, y]")
+        raise JoshuaError(f"segment {index}: {field} must be [x, y]")
     if not all(abs(n) <= 100000 for n in value):
-        raise FreezeframeError(f"segment {index}: {field} is out of range")
+        raise JoshuaError(f"segment {index}: {field} is out of range")
     return (round(value[0]), round(value[1]))
 
 
 def parse(raw):
     """Validate the agent's segments before anything touches the keyboard."""
     if not isinstance(raw, list) or not raw:
-        raise FreezeframeError("segments must be a non-empty list")
+        raise JoshuaError("segments must be a non-empty list")
     if len(raw) > MAX_SEGMENTS:
-        raise FreezeframeError(f"at most {MAX_SEGMENTS} segments per step")
+        raise JoshuaError(f"at most {MAX_SEGMENTS} segments per step")
     segments = []
     total = 0
     for index, item in enumerate(raw):
         if not isinstance(item, dict):
-            raise FreezeframeError(f"segment {index} must be an object")
+            raise JoshuaError(f"segment {index} must be an object")
         extra = set(item) - {"ms", "keys", "buttons", "mouse_to", "mouse_move"}
         if extra:
-            raise FreezeframeError(f"segment {index}: unknown fields {sorted(extra)}")
+            raise JoshuaError(f"segment {index}: unknown fields {sorted(extra)}")
         ms = item.get("ms")
         if not isinstance(ms, int) or isinstance(ms, bool) or not 10 <= ms <= MAX_TOTAL_MS:
-            raise FreezeframeError(f"segment {index}: ms must be an integer from 10 to {MAX_TOTAL_MS}")
+            raise JoshuaError(f"segment {index}: ms must be an integer from 10 to {MAX_TOTAL_MS}")
         keys = _names(item.get("keys"), KEYS, "keys", index)
         for modifiers, others in _FORBIDDEN:
             if modifiers & set(keys) and others & set(keys):
-                raise FreezeframeError(f"segment {index}: that key combination would leave the game")
+                raise JoshuaError(f"segment {index}: that key combination would leave the game")
         if _ALT & set(keys) and _CTRL & set(keys) and "f12" in keys:
-            raise FreezeframeError(f"segment {index}: Ctrl+Alt+F12 is reserved for the user's abort")
+            raise JoshuaError(f"segment {index}: Ctrl+Alt+F12 is reserved for the user's abort")
         segments.append(Segment(
             ms=ms, keys=keys,
             buttons=_names(item.get("buttons"), BUTTONS, "buttons", index),
@@ -114,5 +114,5 @@ def parse(raw):
         ))
         total += ms
     if total > MAX_TOTAL_MS:
-        raise FreezeframeError(f"a step may last at most {MAX_TOTAL_MS} ms; this one is {total} ms")
+        raise JoshuaError(f"a step may last at most {MAX_TOTAL_MS} ms; this one is {total} ms")
     return segments

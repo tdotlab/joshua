@@ -1,8 +1,8 @@
 /*
- * ffclock: injected into a game so that time spent frozen never reaches it.
+ * jclock: injected into a game so that time spent frozen never reaches it.
  *
  * The controller suspends the whole process, and before resuming it adds the
- * suspended duration to FFShared.offset_qpc. Every hooked clock subtracts that
+ * suspended duration to JShared.offset_qpc. Every hooked clock subtracts that
  * offset, so the game sees one continuous timeline.
  *
  * Hooking is done by rewriting import tables, which needs no third-party code.
@@ -18,19 +18,19 @@
 #include <stdio.h>
 #include <wchar.h>
 
-#define FF_MAGIC 0x4B434646u /* "FFCK" */
-#define FF_VERSION 1u
+#define J_MAGIC 0x4B43534Au /* "JSCK" */
+#define J_VERSION 1u
 
-/* Layout is mirrored in src/freezeframe/process.py. */
+/* Layout is mirrored in src/joshua/process.py. */
 typedef struct {
     DWORD magic;
     DWORD version;
     volatile LONG64 offset_qpc; /* written only while this process is suspended */
     volatile LONG patched;      /* number of import entries redirected */
     volatile LONG ready;
-} FFShared;
+} JShared;
 
-static FFShared *shared;
+static JShared *shared;
 static HMODULE self_module;
 static LONG64 qpc_frequency;
 static wchar_t windows_dir[MAX_PATH];
@@ -271,11 +271,11 @@ static int initialise(void)
     size_t i, j;
     UINT length;
 
-    swprintf(name, 64, L"Local\\FreezeframeClock-%lu", GetCurrentProcessId());
-    mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(FFShared), name);
+    swprintf(name, 64, L"Local\\JoshuaClock-%lu", GetCurrentProcessId());
+    mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(JShared), name);
     if (!mapping)
         return 0;
-    shared = (FFShared *)MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(FFShared));
+    shared = (JShared *)MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(JShared));
     if (!shared)
         return 0;
 
@@ -289,8 +289,8 @@ static int initialise(void)
     windows_dir_len = length + 1;
     InitializeCriticalSection(&patch_lock);
 
-    shared->magic = FF_MAGIC;
-    shared->version = FF_VERSION;
+    shared->magic = J_MAGIC;
+    shared->version = J_VERSION;
     QueryPerformanceCounter(&now);
     last_qpc = now.QuadPart - shared->offset_qpc;
     last_tick64 = (LONG64)GetTickCount64() - offset_ms();

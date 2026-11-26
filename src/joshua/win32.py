@@ -1,4 +1,4 @@
-"""The Windows API surface Freezeframe uses, declared once."""
+"""The Windows API surface Joshua uses, declared once."""
 
 import ctypes
 from ctypes import wintypes as w

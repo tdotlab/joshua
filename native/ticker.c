@@ -204,10 +204,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command, int s
     window_class.lpfnWndProc = procedure;
     window_class.hInstance = instance;
     window_class.hCursor = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
-    window_class.lpszClassName = L"FreezeframeTicker";
+    window_class.lpszClassName = L"JoshuaTicker";
     RegisterClassW(&window_class);
     AdjustWindowRect(&size, WS_OVERLAPPEDWINDOW, FALSE);
-    window = CreateWindowW(window_class.lpszClassName, L"Freezeframe Ticker", WS_OVERLAPPEDWINDOW,
+    window = CreateWindowW(window_class.lpszClassName, L"Joshua Ticker", WS_OVERLAPPEDWINDOW,
                            120, 120, size.right - size.left, size.bottom - size.top, NULL, NULL,
                            instance, NULL);
     if (!hidden)
