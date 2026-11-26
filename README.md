@@ -35,7 +35,64 @@ codex mcp add joshua -- python C:\path\to\Joshua\src\serve.py
 ```
 
 Any other client that runs stdio MCP servers on the same machine uses the same
-command.
+command. For an agent on another machine, see below.
+
+## Playing from another machine
+
+Joshua can serve an agent elsewhere on your Tailscale network. The game, screen
+and keyboard are still this PC's, so it has to be logged in and unlocked.
+
+On the PC with the games:
+
+```powershell
+python C:\path\to\Joshua\src\serve.py --http
+```
+
+It listens on this PC's Tailscale address, port 8737, until you press Ctrl+C
+(`--host` and `--port` change that; only loopback and Tailscale addresses are
+accepted). It prints the URL, and logs each tool call and each refused token.
+
+Clients must send a token, which is made on the first run. This copies it:
+
+```powershell
+Get-Content "$env:LOCALAPPDATA\Joshua\token.txt" | Set-Clipboard
+```
+
+`JOSHUA_TOKEN_FILE` keeps it elsewhere. To replace it, delete the file and
+restart the server.
+
+Any MCP client that speaks streamable HTTP can use the URL with the header
+`Authorization: Bearer <token>`. The connection is plain HTTP; Tailscale does
+the encryption. With Hermes Agent, as the user Hermes runs as:
+
+```bash
+hermes mcp add joshua --url http://100.x.y.z:8737/mcp --auth header
+```
+
+It asks for the token without showing it and keeps it in its `.env`. Then start
+a new chat or send `/reload-mcp`.
+
+Whoever has the token and can reach the port can see and control the listed
+programs. A listed program is trusted with that: if its window offers a command
+line, as DOSBox does, the agent can type into it. If another machine cannot
+connect, check that Windows Firewall lets Python accept connections on private
+networks and that your tailnet's access rules allow it.
+
+## One player at a time
+
+There is one screen and one keyboard, so one game is played by one client.
+
+- While a game is being played, other clients are refused. `list_games` still
+  answers.
+- This holds across processes: a second Claude Code or Codex session cannot
+  start a game until the first calls `end_session` or exits, or its game closes.
+- Over the network, a player who disconnects can be replaced at once, and one
+  who has made no call for 5 minutes can be replaced then. The newcomer calls
+  `start_game`; naming the same game carries on without restarting it.
+- After 30 minutes without a call, the network server lets go of the game by
+  itself. A frozen game is thawed; a paused one stays paused.
+- Joshua tells clients apart by connection. A single Hermes gateway shares one
+  connection between its chats, so two of its chats look like one player.
 
 ## games.json
 
@@ -176,10 +233,10 @@ python -m unittest discover -s tests -v
 By default the tests inject nothing, start no game and send no real input. Two
 groups are opt-in:
 
-- `JOSHUA_LIVE=1`: the real server plays `tests/pausebox.py`, a small Tk
-  window that pauses with P, using real input and screenshots. It takes the
-  screen and keyboard for about ten seconds, so leave the computer alone. Nothing
-  is injected or suspended.
+- `JOSHUA_LIVE=1`: the real server, over stdio and over HTTP on loopback, plays
+  `tests/pausebox.py`, a small Tk window that pauses with P, using real input and
+  screenshots. It takes the screen and keyboard for about twenty seconds, so
+  leave the computer alone. Nothing is injected or suspended.
 - `JOSHUA_NATIVE=1`: the clock hook tests. They inject and suspend, and they
   are what set off Defender.
 

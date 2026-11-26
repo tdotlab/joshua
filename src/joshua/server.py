@@ -1,12 +1,20 @@
-"""A small MCP server over stdio: newline-delimited JSON-RPC, no dependencies."""
+"""A small MCP server, no dependencies: the tools, and newline-delimited JSON-RPC over stdio.
 
+network.py serves the same tools to an agent on another machine.
+"""
+
+import argparse
 import base64
 import json
+import math
 import sys
+import threading
+import time
 import traceback
 
 from . import JoshuaError, __version__
 from . import config, timeline
+from .lock import PlayerLock
 from .session import Session
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
@@ -19,6 +27,12 @@ INSTRUCTIONS = (
     " register. If a step reports that it stopped early or has no screenshot, the user may be using the"
     " computer: do not retry in a loop. Only games the user listed can be played."
 )
+
+HANDOVER_SECONDS = 300    # a network player quiet this long may be replaced by another
+ABANDONED_SECONDS = 1800  # and one quiet this long loses the game altogether
+TIDY_SECONDS = 5
+
+ANOTHER_PLAYER = "another player is using Joshua, and only one can play at a time. Do not retry in a loop."
 
 _STATE = {
     "frozen": "is now frozen",
@@ -50,14 +64,18 @@ TOOLS = [
     {"name": "list_games", "description": "List the games the user has allowed, with their notes.",
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "start_game",
-     "description": "Start a listed game (or attach to it if already running), then freeze it and return a"
-                    " screenshot. Takes over the screen and keyboard focus.",
+     "description": "Start a listed game (or attach to it if already running), then hold it still and return"
+                    " a screenshot. Takes over the user's screen and keyboard focus. Only one player can use"
+                    " Joshua at a time: call end_session when you are done.",
      "inputSchema": {"type": "object", "properties": {"game": {"type": "string"}}, "required": ["game"],
                      "additionalProperties": False}},
     {"name": "step",
      "description": "Let the game run, play the input segments in order, hold it still again and return a"
                     " screenshot. All keys and buttons are released at the end. To just let time pass, send"
-                    " one segment with only ms. The pause key of a game held by pausing cannot be used.",
+                    " one segment with only ms. The pause key of a game held by pausing cannot be used. Start"
+                    " with short steps (200-500 ms) until you know how the game responds; a tap needs about 80"
+                    " ms. If input stopped early or there is no screenshot, the user may be using the computer:"
+                    " do not retry in a loop.",
      "inputSchema": {"type": "object", "properties": {
          "segments": {"type": "array", "items": _SEGMENT, "minItems": 1, "maxItems": timeline.MAX_SEGMENTS},
          "settle_ms": {"type": "integer", "minimum": 0, "maximum": 3000,
@@ -89,9 +107,69 @@ def _image(frame):
 
 
 class Server:
-    def __init__(self, session_class=Session):
+    """At most one game, played by one client.
+
+    A client is None over stdio, where there is only the one, and a session id over
+    the network, where several may be connected.
+    """
+
+    def __init__(self, session_class=Session, lock=None, clock=time.monotonic):
         self.session = None
+        self.owner = None   # the client playing the current game
+        self._caller = None  # the client whose call is being answered
+        self._left = False   # the owner disconnected
+        self._used = 0.0     # when the owner last called
+        self._clock = clock
+        self._claim = lock or PlayerLock()
+        self._turn = threading.RLock()  # one tool call at a time
         self._session_class = session_class
+
+    # -- whose turn it is ------------------------------------------------------
+
+    def _admit(self, name):
+        """Refuse a call that would interfere with another client's game."""
+        if name == "list_games" or not self.session or self._caller == self.owner:
+            return
+        if not self.session.process.alive():
+            self._let_go()
+            return
+        waiting = HANDOVER_SECONDS - (self._clock() - self._used)
+        if waiting > 0 and not self._left:
+            raise JoshuaError(f"{ANOTHER_PLAYER} If that was you before reconnecting, start_game can take the"
+                              f" game over in {math.ceil(waiting / 60)} min.")
+        if name not in ("start_game", "end_session"):
+            raise JoshuaError(f"the last player left {self.session.game.name} open; call start_game to take it"
+                              " over")
+
+    def _let_go(self, close_game=False):
+        outcome = self.session.close(close_game=close_game)
+        self.session = self.owner = None
+        self._claim.release()
+        return outcome
+
+    def leave(self, client):
+        """A network client disconnected. Its game stays held for whoever takes it over."""
+        with self._turn:
+            if self.session and client == self.owner:
+                self._left = True
+
+    def tidy(self):
+        """Between calls: stop claiming a game that exited, and let go of an abandoned one."""
+        if not self._turn.acquire(blocking=False):
+            return  # a call is in progress
+        try:
+            if not self.session:
+                return
+            if not self.session.process.alive():
+                self._claim.release()
+            elif self.owner is not None and self._clock() - self._used >= ABANDONED_SECONDS:
+                self._let_go()
+        except Exception:  # report, keep serving
+            traceback.print_exc(file=sys.stderr)
+            self.session = self.owner = None
+            self._claim.release()
+        finally:
+            self._turn.release()
 
     # -- tools -----------------------------------------------------------------
 
@@ -135,19 +213,32 @@ class Server:
                                 for g in games.values()))]
 
     def tool_start_game(self, game):
-        if self.session and self.session.process.alive():
+        alive = self.session and self.session.process.alive()
+        if alive and self._caller == self.owner:
             raise JoshuaError(f"already playing {self.session.game.name}; call end_session first")
-        if self.session:
-            self.session.close()
-            self.session = None
         games = config.load()
         if game not in games:
             raise JoshuaError(f"{game!r} is not listed. Allowed: {', '.join(games) or 'none'}")
-        self.session, result = self._session_class.start(games[game])
+        if alive and game == self.session.game.name:
+            # Taking over keeps the session, and with it whether the game is paused.
+            return self._started(self.session.game, self.session.step([], settle_ms=500))
+        if self.session:
+            self._let_go()
+        if not self._claim.claim():
+            raise JoshuaError(f"{ANOTHER_PLAYER} It is connected through another Joshua process on this PC.")
+        try:
+            self.session, result = self._session_class.start(games[game])
+        except BaseException:
+            self._claim.release()
+            raise
+        return self._started(games[game], result)
+
+    def _started(self, game, result):
+        self.owner, self._left = self._caller, False
         content = self._describe(result)
-        if games[game].notes:
-            content.append(_text(f"Notes for {game}: {games[game].notes}"))
-        content.append(_text(self._holding(games[game])))
+        if game.notes:
+            content.append(_text(f"Notes for {game.name}: {game.notes}"))
+        content.append(_text(self._holding(game)))
         return content
 
     def _holding(self, game):
@@ -182,21 +273,32 @@ class Server:
                 _image(session.frame)]
 
     def tool_end_session(self, close_game=False):
-        session = self._require_session()
-        outcome = session.close(close_game=bool(close_game))
-        self.session = None
-        return [_text(f"Session ended: {outcome}.")]
+        self._require_session()
+        return [_text(f"Session ended: {self._let_go(bool(close_game))}.")]
 
     def shutdown(self):
-        if self.session:
-            try:
-                self.session.close()
-            finally:
-                self.session = None
+        with self._turn:
+            if self.session:
+                try:
+                    self._let_go()
+                finally:
+                    self.session = self.owner = None
+                    self._claim.release()
 
     # -- protocol --------------------------------------------------------------
 
-    def _call_tool(self, params):
+    def _call_tool(self, params, client):
+        with self._turn:
+            self._caller = client
+            try:
+                return self._run_tool(params)
+            finally:
+                if self.session and client == self.owner:
+                    self._used = self._clock()
+                if self.session and not self.session.process.alive():
+                    self._claim.release()
+
+    def _run_tool(self, params):
         name = params.get("name")
         arguments = params.get("arguments") or {}
         schema = next((tool["inputSchema"] for tool in TOOLS if tool["name"] == name), None)
@@ -209,6 +311,7 @@ class Server:
             missing = set(schema.get("required", ())) - set(arguments)
             if unknown or missing:
                 raise JoshuaError(f"bad arguments (unknown: {sorted(unknown)}, missing: {sorted(missing)})")
+            self._admit(name)
             return {"content": getattr(self, f"tool_{name}")(**arguments), "isError": False}
         except JoshuaError as error:
             return {"content": [_text(str(error))], "isError": True}
@@ -216,7 +319,7 @@ class Server:
             traceback.print_exc(file=sys.stderr)
             return {"content": [_text(f"internal error: {type(error).__name__}: {error}")], "isError": True}
 
-    def handle(self, message):
+    def handle(self, message, client=None):
         """Return the response for one JSON-RPC message, or None for notifications."""
         if not isinstance(message, dict) or not isinstance(message.get("method"), str):
             if isinstance(message, dict) and ("result" in message or "error" in message):
@@ -241,7 +344,7 @@ class Server:
             reply["result"] = {"tools": TOOLS}
         elif method == "tools/call":
             try:
-                reply["result"] = self._call_tool(params)
+                reply["result"] = self._call_tool(params, client)
             except LookupError as error:
                 reply["error"] = {"code": -32602, "message": str(error)}
         else:
@@ -269,11 +372,38 @@ class Server:
             self.shutdown()
 
 
-def main():
+def _keep_tidy(server):
+    while True:
+        time.sleep(TIDY_SECONDS)
+        server.tidy()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="serve.py", description="Joshua, an MCP server for playing games."
+                                     " With no arguments it speaks MCP over stdio.")
+    parser.add_argument("--http", action="store_true",
+                        help="serve an agent on another machine over Tailscale, until Ctrl+C")
+    parser.add_argument("--host", help="with --http, the address to listen on: this PC's Tailscale address (the"
+                                       " default) or loopback")
+    parser.add_argument("--port", type=int, help="with --http, the port to listen on")
+    options = parser.parse_args(argv)
+    if not options.http and (options.host is not None or options.port is not None):
+        parser.error("--host and --port need --http")
+
     from . import win32 as api
 
     api.use_physical_pixels()
     api.timeBeginPeriod(1)
+    server = Server()
+    if options.http:
+        from . import network
+
+        try:
+            network.run(server, options.host, options.port)
+        except (JoshuaError, OSError, OverflowError) as error:
+            sys.exit(f"joshua: {error}")
+        return
     sink = sys.stdout.buffer
     sys.stdout = sys.stderr  # nothing but protocol may reach the real stdout
-    Server().serve(sys.stdin.buffer, sink)
+    threading.Thread(target=_keep_tidy, args=(server,), daemon=True).start()
+    server.serve(sys.stdin.buffer, sink)

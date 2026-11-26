@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 import zlib
 from pathlib import Path
 from unittest import mock
@@ -15,6 +16,7 @@ from unittest import mock
 import support
 from joshua import JoshuaError, capture, config, hold, keyboard, process, timeline, window
 from joshua import session as session_module
+from joshua.lock import PlayerLock
 from joshua.server import Server
 from joshua.session import Result, Session
 
@@ -473,7 +475,9 @@ def request(method, params=None, number=1):
 class ServerTests(unittest.TestCase):
     def setUp(self):
         FakeSession.closed = []
-        self.server = Server(session_class=FakeSession)
+        # A claim of its own: a real game being played must neither fail these tests nor be disturbed.
+        self.server = Server(session_class=FakeSession, lock=PlayerLock(f"Local\\JoshuaTest-{uuid.uuid4().hex}"))
+        self.addCleanup(self.server.shutdown)
         game = config.Game("toy", Path("toy.exe"), hold="pause_key", pause_key=("p",), notes="Arrows move.")
         patcher = mock.patch.object(config, "load", lambda: {"toy": game})
         patcher.start()

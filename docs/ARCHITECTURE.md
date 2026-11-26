@@ -1,13 +1,42 @@
 # Architecture
 
 ```
-agent --MCP over stdio--> server.py --> session.py --> hold / process / window / keyboard / capture
-                                                                  |
-                                                     game <-- jclock.dll (optional, freeze only)
+agent --MCP over stdio-----------------> server.py --> session.py --> hold / process / window / keyboard / capture
+agent --MCP over HTTP--> network.py ----^    |                                     |
+                                          lock.py                     game <-- jclock.dll (optional, freeze only)
 ```
 
-The server speaks newline-delimited JSON-RPC itself and has no dependencies. It
-holds one game session at a time. `config.py` is the allowlist.
+The server speaks JSON-RPC itself and has no dependencies. It holds one game
+session at a time. `config.py` is the allowlist.
+
+## One player
+
+`lock.py` is a claim shared by every Joshua process in the Windows sign-in: a
+named mutex, `Local\JoshuaPlayer`, that exists while a session's game is alive.
+It is never waited on, so which thread releases it does not matter, and Windows
+frees it if its holder dies. Processes in other sign-ins are not seen, and they
+have other screens.
+
+Inside one process, `Server.owner` is the client that started or took over the
+game: `None` over stdio, a session id over HTTP. Tool calls run one at a time.
+A takeover keeps the `Session` object when the game is the same. A fresh one
+would assume the game is running and press the pause key on a paused game,
+inverting the state it is meant to track.
+
+`tidy` runs between calls, releasing the claim of a game that has exited and
+ending a network session nobody has used for 30 minutes.
+
+## The network transport (`network.py`)
+
+MCP's streamable HTTP, reduced to what a server that never speaks first needs:
+each POST gets one JSON reply, and there is no event stream (GET answers 405).
+`Mcp-Session-Id` tells clients apart. The `MCP-Protocol-Version` header is
+ignored, because Hermes sends the newest version it knows whatever was agreed.
+
+It binds only to loopback or a Tailscale address, drops connections from other
+addresses, requires the bearer token on every request, and refuses any request
+with an `Origin` header, which is how a web page would arrive. The port is bound
+exclusively, since Windows would otherwise let a second program share it.
 
 ## A turn
 

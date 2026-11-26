@@ -3,20 +3,25 @@
 As of 2026-11-26. Experimental. Registered with Claude Code (user scope) as
 `joshua`, with a local `games.json` listing Daggerfall and Redguard. The server
 connects and lists them; no agent has played through that registration yet.
+Network mode and the one-player lock are built; no other machine has connected.
 
 ## Verified
 
-- Safe tests: 45 pass, 7 opt-in tests skipped. They cover step parsing, key
+- Safe tests: 74 pass, 9 opt-in tests skipped. They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
   calls replaced), PNG encoding and corner masking, config, the MCP protocol
-  including the real server over stdio, coordinate mapping, covering-window
-  wording, and starting a program without injection.
-- Live tests (`JOSHUA_LIVE=1`), last passed just before the project was renamed
-  from Freezeframe (a change of names only) and not rerun since: the real
-  server over stdio played `tests/pausebox.py` with `"hold": "pause_key"`. Window
+  including the real server over stdio and HTTP, whose turn it is (takeover,
+  expiry, a second process), the network server's refusals, coordinate mapping,
+  covering-window wording, and starting a program without injection.
+- Live tests (`JOSHUA_LIVE=1`): the real server, over stdio and over HTTP on
+  loopback, played `tests/pausebox.py` with `"hold": "pause_key"`. Window
   finding, focus, scan-code input, the pause key, screen capture and closing all
   worked. The game did not advance between steps, and a toggle started out of
   step was detected by the picture comparison and fixed by `repause`.
+- Network mode with the official MCP Python SDK 2.0.0 as client, on loopback:
+  handshake, ping, tool list, calls from two clients at once and a wrong token,
+  with no game launched. Ctrl+C stops the server cleanly. Started with no
+  `--host`, it bound to this PC's Tailscale address and answered from this PC.
 - Real games, `"hold": "pause_key"` with Alt+Pause (Microsoft Defender recorded no
   detection during them):
   - Daggerfall, DOSBox 0.74: intro movie and menus held (over 5 s paused the
@@ -35,6 +40,9 @@ connects and lists them; no agent has played through that registration yet.
 
 ## Not verified
 
+- A connection from another machine: Windows Firewall, tailnet access rules,
+  Hermes itself, and whether its model receives the screenshots as pictures.
+- A real game played over the network.
 - A native Windows game. GTA 1 (the 2002 Windows version from Steam, launched
   directly) showed its menus, which were captured and driven, then crashed with
   an access violation in its own program while loading the first mission: three
@@ -61,6 +69,9 @@ connects and lists them; no agent has played through that registration yet.
   `pause_ms` before and after).
 
 ## Next
+
+Connect Hermes from the laptop: list the games, then start one and check what
+the model says it sees.
 
 Let an agent play Daggerfall or Redguard from a fresh Claude Code session, and
 see what the notes and tools leave it guessing about.

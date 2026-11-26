@@ -6,6 +6,7 @@ suspended: these tests use "hold": "pause_key" only.
 """
 
 import base64
+import http.client
 import json
 import os
 import struct
@@ -15,6 +16,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import support
 from joshua import process
@@ -37,9 +39,7 @@ class LiveTests(unittest.TestCase):
 
     def _kill_strays(self):
         if self.server:
-            self.server.stdin.close()
-            self.server.wait(15)
-            self.server.stdout.close()
+            self.stop_server()
         for pid in set(process.find_running(self.pythonw)) - self.before:
             process.kill(pid)
 
@@ -52,10 +52,18 @@ class LiveTests(unittest.TestCase):
         }}), encoding="utf-8")
         log = open(self.directory / "server.log", "w", encoding="utf-8")
         self.addCleanup(log.close)
+        self.start_server({**os.environ, "JOSHUA_GAMES": str(games)}, log)
+        self.rpc("initialize", {"protocolVersion": "2025-11-25"})
+
+    def start_server(self, environment, log):
         self.server = subprocess.Popen(
             [sys.executable, str(support.PROJECT / "src" / "serve.py")], stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=log, env={**os.environ, "JOSHUA_GAMES": str(games)})
-        self.rpc("initialize", {"protocolVersion": "2025-11-25"})
+            stdout=subprocess.PIPE, stderr=log, env=environment)
+
+    def stop_server(self):
+        self.server.stdin.close()
+        self.server.wait(15)
+        self.server.stdout.close()
 
     def rpc(self, method, params):
         self.number += 1
@@ -138,6 +146,44 @@ class LiveTests(unittest.TestCase):
         error, text, _ = self.call("end_session")
         self.assertFalse(error, text)
         self.assertIn("left paused", text)
+
+
+class NetworkLiveTests(LiveTests):
+    """The same games played through the network server, over loopback."""
+
+    def start_server(self, environment, log):
+        token_file = self.directory / "token.txt"
+        self.server = subprocess.Popen(
+            [sys.executable, str(support.PROJECT / "src" / "serve.py"), "--http", "--host", "127.0.0.1",
+             "--port", "0"], stdout=subprocess.PIPE, stderr=log,
+            env={**environment, "JOSHUA_TOKEN_FILE": str(token_file)})
+        banner = []
+        while not banner or not banner[-1].startswith(b"Ctrl+C"):
+            banner.append(self.server.stdout.readline())
+            self.assertTrue(banner[-1], "the server ended early")
+        port = urlsplit(banner[0].split()[-1].decode()).port
+        self.connection = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
+        self.addCleanup(self.connection.close)
+        self.headers = {"Content-Type": "application/json",
+                        "Authorization": f"Bearer {token_file.read_text().strip()}"}
+
+    def stop_server(self):
+        self.server.kill()
+        self.server.wait(15)
+        self.server.stdout.close()
+
+    def rpc(self, method, params):
+        self.number += 1
+        message = {"jsonrpc": "2.0", "id": self.number, "method": method, "params": params}
+        self.connection.request("POST", "/mcp", json.dumps(message), self.headers)
+        response = self.connection.getresponse()
+        body = response.read()
+        self.assertEqual(response.status, 200, body)
+        if response.headers.get("Mcp-Session-Id"):
+            self.headers["Mcp-Session-Id"] = response.headers["Mcp-Session-Id"]
+        reply = json.loads(body)
+        self.assertEqual(reply.get("id"), self.number, reply)
+        return reply["result"]
 
 
 if __name__ == "__main__":

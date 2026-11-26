@@ -7,12 +7,13 @@ Read [README.md](README.md), then [docs/STATUS.md](docs/STATUS.md).
 ## Map
 
 - `src/serve.py`: entry point
-- `src/joshua/`: `server` (MCP), `session` (one game turn), `hold` (pause
-  key / freeze / none), `process` (launch, freeze, clock), `window`, `keyboard`,
-  `capture`, `timeline`, `config`, `win32` (all ctypes declarations)
+- `src/joshua/`: `server` (MCP tools, stdio, whose turn it is), `network` (HTTP
+  over Tailscale), `lock` (one player per PC), `session` (one game turn), `hold`
+  (pause key / freeze / none), `process` (launch, freeze, clock), `window`,
+  `keyboard`, `capture`, `timeline`, `config`, `win32` (all ctypes declarations)
 - `native/`: `jclock.c` (clock hook), `jinject.c`, `ticker.c` (test game)
-- `tests/`: `test_unit.py` is safe; `test_live.py` plays `pausebox.py` with real
-  input (opt-in); `test_clock.py` is native and opt-in
+- `tests/`: `test_unit.py` and `test_network.py` are safe; `test_live.py` plays
+  `pausebox.py` with real input (opt-in); `test_clock.py` is native and opt-in
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it works and why
 
 ## Commands
@@ -21,8 +22,8 @@ Read [README.md](README.md), then [docs/STATUS.md](docs/STATUS.md).
 python -m unittest discover -s tests -v
 ```
 
-Live tests take the screen and keyboard for about ten seconds; only run them when
-the user is not at the keyboard or has agreed:
+Live tests take the screen and keyboard for about twenty seconds; only run them
+when the user is not at the keyboard or has agreed:
 
 ```powershell
 $env:JOSHUA_LIVE = "1"; python -m unittest discover -s tests -p test_live.py -v
@@ -41,6 +42,10 @@ $env:JOSHUA_LIVE = "1"; python -m unittest discover -s tests -p test_live.py -v
 - Never change antivirus settings, and never alter code or builds to avoid
   detection.
 - Keep the safety properties: allowlisted games only, input only to the focused
-  game, everything released after a step, no pixels or titles from other windows.
+  game, everything released after a step, no pixels or titles from other windows,
+  one player at a time. The network server listens only on loopback or Tailscale
+  and requires its token; never print or log the token.
+- Tests use their own claim name, never the real `PlayerLock()` of an in-process
+  `Server`.
 - Offline single-player games only.
 - In `jclock.c`, hooks read the real clock before the offset. See ARCHITECTURE.

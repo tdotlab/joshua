@@ -21,6 +21,8 @@ SYNCHRONIZE = 0x00100000
 PROCESS_STATE_ALL_ACCESS = 0x001F0001
 FILE_MAP_ALL_ACCESS = 0x000F001F
 STILL_ACTIVE = 259
+ERROR_ACCESS_DENIED = 5
+ERROR_ALREADY_EXISTS = 183
 
 GA_ROOT = 2
 GW_HWNDPREV = 3
@@ -94,6 +96,7 @@ _P = ctypes.POINTER
 
 OpenProcess = _declare(kernel32, "OpenProcess", w.HANDLE, w.DWORD, w.BOOL, w.DWORD)
 CloseHandle = _declare(kernel32, "CloseHandle", w.BOOL, w.HANDLE)
+CreateMutexW = _declare(kernel32, "CreateMutexW", w.HANDLE, ctypes.c_void_p, w.BOOL, w.LPCWSTR)
 TerminateProcess = _declare(kernel32, "TerminateProcess", w.BOOL, w.HANDLE, w.UINT)
 GetExitCodeProcess = _declare(kernel32, "GetExitCodeProcess", w.BOOL, w.HANDLE, _P(w.DWORD))
 WaitForSingleObject = _declare(kernel32, "WaitForSingleObject", w.DWORD, w.HANDLE, w.DWORD)
