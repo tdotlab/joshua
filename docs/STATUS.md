@@ -49,6 +49,18 @@ Network mode and the one-player lock are built; no other machine has connected.
     whether a save, the installed files or `commandline.txt` is responsible, or
     whether it also happens without Joshua. The same `commandline.txt` was in
     place when the episode loaded.
+- Factorio 2.1.24 (Steam copy, started directly with a `steam_appid.txt`, since
+  removed), with a separate config and a new map, over HTTP on loopback:
+  - Without that file the game handed itself to Steam, Joshua reported it exited,
+    and Steam waited for the user to approve the arguments.
+  - Pause held it: the picture, fire animation included, was identical over 20 s
+    (the frame counter's strip and the right edge left out).
+  - Walked to the crash wreck, opened it with a click and moved its ammunition to
+    the character with Ctrl+click, using `mouse_to`.
+  - A pause pressed during loading was ignored; `repause` after attaching again
+    put the toggle back in step.
+  - The game was killed at the end. The user's Factorio folder and its Steam
+    Cloud files were unchanged.
 - Native run, interrupted by Defender: a hooked 32-bit test program thawed after
   its controller was killed, and attaching the hook to a running program passed
   for 32-bit and 64-bit. That was before the rename: the renamed C sources

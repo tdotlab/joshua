@@ -6,9 +6,10 @@ is held again and returns a screenshot. Slow reasoning stops mattering; being ba
 at the game still does.
 
 **Experimental.** Pause-key mode has played real games: two DOS games in
-DOSBox, including a 3D sword fight, and a motorcycle ride in a GTA IV episode
-started through Steam. Freeze mode has never run against a real game. See
-[docs/STATUS.md](docs/STATUS.md) for what is and is not verified.
+DOSBox, including a 3D sword fight, a motorcycle ride in a GTA IV episode
+started through Steam, and walking and looting in Factorio. Freeze mode has
+never run against a real game. See [docs/STATUS.md](docs/STATUS.md) for what is
+and is not verified.
 
 ## Requirements
 
@@ -162,6 +163,40 @@ A slow launcher can outlast an MCP client's tool timeout (GTA IV took about
 three minutes). The client then does not see the result: raise the timeout (in
 Codex, `tool_timeout_sec`, 60 seconds by default), or start the game yourself
 first.
+
+### Factorio
+
+The Steam copy, started directly, hands itself back to Steam and exits, and
+Steam then asks you to approve the arguments. A `steam_appid.txt` file
+containing `427520` beside `factorio.exe` stops the hand-off (a Steamworks
+developer feature; delete the file afterwards if you do not want it to stay).
+This entry then worked, with a `config.ini` of its own so the game did not use
+your saves or settings:
+
+```json
+"factorio": {
+  "exe": "C:/Program Files (x86)/Steam/steamapps/common/Factorio/bin/x64/factorio.exe",
+  "args": ["-c", "C:/path/to/agent/config.ini", "--load-game", "C:/path/to/agent/map.zip",
+           "--window-size", "1280x720", "--disable-audio"],
+  "hold": "pause_key",
+  "pause_key": "pause",
+  "pause_ms": 200,
+  "startup_ms": 40000,
+  "capture": "before_pause",
+  "check_pause": false
+}
+```
+
+The `config.ini` needs `read-data=__PATH__system-read-data__` and a `write-data`
+folder under `[path]`, and `full-screen=false` under `[graphics]`; make the map
+with `factorio.exe -c config.ini --create map.zip`. `startup_ms` must outlast
+loading (about 30 seconds the first time): a pause pressed while loading is
+ignored, leaving the toggle out of step. The run used 20000, which was too short;
+40000 has not been tried. The paused screen is dimmed, hence
+`before_pause`. `check_pause` was off because of a live frame counter on the test
+PC. A separate `config.ini` does not separate Steam Cloud: the game could still
+read the account's cloud files. The test ended by killing the game, and those
+files were unchanged; what a normal exit writes to them has not been checked.
 
 ## Holding the game still
 
