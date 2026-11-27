@@ -45,6 +45,49 @@ def encode_png(width, height, bgrx):
             + chunk(b"IDAT", zlib.compress(raw, 4)) + chunk(b"IEND", b""))
 
 
+@dataclass(frozen=True)
+class Change:
+    """How much of a picture differs from another."""
+
+    pixels: int  # how many differ
+    total: int
+    box: tuple   # (left, top, right, bottom) around them; right and bottom are one past the last
+
+
+def _rows(png):
+    """The filtered rows of a PNG made by encode_png: a zero byte, then the RGB pixels, for each."""
+    length = struct.unpack_from(">I", png, 33)[0]  # after the signature and the 25-byte header
+    return zlib.decompress(png[41:41 + length])
+
+
+def difference(before, after):
+    """What changed between two frames, or None if they show the same pixels."""
+    if before.png == after.png:
+        return None
+    width, height = after.width, after.height
+    if (before.width, before.height) != (width, height):
+        return Change(width * height, width * height, (0, 0, width, height))
+    old, new = _rows(before.png), _rows(after.png)
+    stride = 1 + width * 3
+    count, left, top, right, bottom = 0, width, height, 0, 0
+    for row in range(height):
+        start = row * stride + 1
+        was, now = old[start:start + width * 3], new[start:start + width * 3]
+        if was == now:
+            continue
+        # Whole rows as integers: a loop over pixels would take most of a second.
+        differing = (int.from_bytes(was, "big") ^ int.from_bytes(now, "big")).to_bytes(width * 3, "big")
+        merged = 0
+        for channel in range(3):
+            merged |= int.from_bytes(differing[channel::3], "big")
+        marks = merged.to_bytes(width, "big")  # one byte per pixel, zero where it is unchanged
+        count += width - marks.count(0)
+        left = min(left, width - len(marks.lstrip(b"\0")))
+        right = max(right, len(marks.rstrip(b"\0")))
+        top, bottom = min(top, row), row + 1
+    return Change(count, width * height, (left, top, right, bottom)) if count else None
+
+
 def corner_radius(dpi, scale):
     """How far in to mask, in screenshot pixels, for a window on a display of this DPI.
 

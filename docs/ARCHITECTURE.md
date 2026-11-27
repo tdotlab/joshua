@@ -102,6 +102,26 @@ key.
 `Freeze` suspends the process (below). `Free` does nothing; the game keeps
 running.
 
+## Finding a pause key (`trial.py`)
+
+`try_pause` runs only on a game listed with `"hold": "none"`, so it grants no
+input the agent did not already have through `step`, and Joshua only reports
+settings: writing `games.json` stays with the user.
+
+It samples the picture about every 100 ms, with both covering checks on each
+sample, because the game is running throughout. One second of baseline must show
+movement, or nothing is pressed: a still scene would make any key look like a
+pause. After the key, the game counts as stopped only if the last second watched
+did not change, and the settings are offered unqualified only if movement then
+came back after the second press (ignoring the first half second, when a pause
+screen going away is itself a change). The time of the last change after the key
+suggests `pause_ms`. A changing picture is reported with the area that changed,
+since only the agent can tell an overlay from a running game. Once anything
+interrupts a trial, no further input is sent, even to resume.
+
+An unheld game that this program started also reports how long ago its window
+appeared, which is what `startup_ms` is measured from.
+
 ## Freezing
 
 `NtCreateProcessStateChange` / `NtChangeProcessState` (Windows 11, undocumented)

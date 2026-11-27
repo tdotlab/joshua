@@ -102,6 +102,45 @@ There is one screen and one keyboard, so one game is played by one client.
 - Joshua tells clients apart by connection. A single Hermes gateway shares one
   connection between its chats, so two of its chats look like one player.
 
+## Adding a game
+
+List the game with its `exe` and `"hold": "none"` (add `steam_appid` for most
+Steam games, [below](#steam-games)). A turn-based game is then done. For a
+real-time one, ask the agent to set it up: it starts the game, uses `step` to
+get into live play somewhere safe with something moving, and calls `try_pause`
+with a likely key.
+
+`try_pause` watches the picture move for a second, presses the key, watches
+whether it stops (3 seconds unless asked for longer), presses again and watches
+for movement. It returns the pictures, what changed and where, and the settings
+that fit, for example:
+
+```json
+{"hold": "pause_key", "pause_key": "esc", "pause_ms": 500}
+```
+
+To accept them, replace the entry's `"hold": "none"` with them, then have the
+agent `end_session` and `start_game`. Joshua never writes `games.json`. An agent
+that can edit files on this PC could, so your approval is only a check if its
+client asks before editing.
+
+Know what the result is worth:
+
+- A still picture is evidence, not proof. A map or inventory screen can cover a
+  game that keeps running. The agent should look at the pictures.
+- A picture that keeps changing can still be a held game: an animated pause menu,
+  or a frame counter drawn on top. The report says where the changes were and, if
+  the picture also moved after the second press, offers settings with
+  `check_pause` off for when only that moved.
+- A wrong key does whatever it normally does, quick-saving over a save included.
+  Try keys the game's controls name, on a save you can lose.
+- If you take focus or press Ctrl+Alt+F12, the trial ends without sending
+  anything more, which can leave the game paused.
+
+For `startup_ms`, an unheld game that Joshua started reports with each step how
+long ago its window appeared. Set `startup_ms` past the point where the game was
+first ready for the pause key.
+
 ## games.json
 
 Only programs listed here can be started, attached to or controlled. The agent
@@ -270,6 +309,7 @@ with anti-cheat.
 | `start_game` | Start or attach, hold still, return a screenshot. |
 | `step` | Let it run, play a list of timed segments, hold still, return a screenshot. |
 | `repause` | Press the pause key once more, when a toggle is out of step. |
+| `try_pause` | For a game listed with `"hold": "none"`: [find its pause settings](#adding-a-game). |
 | `look` | The latest screenshot again. |
 | `end_session` | Let go (a frozen game is thawed, a paused one stays paused); optionally close a game this session started. |
 
@@ -309,8 +349,8 @@ python -m unittest discover -s tests -v
 By default the tests start no game, suspend nothing and send no real input. One
 group is opt-in: with `JOSHUA_LIVE=1`, the real server, over stdio and over HTTP
 on loopback, plays `tests/pausebox.py`, a small Tk window that pauses with P,
-using real input and screenshots. It takes the screen and keyboard for about
-twenty seconds, so leave the computer alone. Nothing is suspended.
+using real input and screenshots. It takes the screen and keyboard for about a
+minute, so leave the computer alone. Nothing is suspended.
 
 Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

@@ -83,6 +83,18 @@ def _pair(value, field, index):
     return (round(value[0]), round(value[1]))
 
 
+def chord(value, field):
+    """A key name, or a list of names pressed together, checked like step input."""
+    names = [value] if isinstance(value, str) else value
+    try:
+        keys = parse([{"ms": 100, "keys": names}])[0].keys
+    except JoshuaError as error:
+        raise JoshuaError(f"{field} is not usable: {error}") from None
+    if not keys:
+        raise JoshuaError(f"{field} must name at least one key")
+    return keys
+
+
 def parse(raw):
     """Validate the agent's segments before anything touches the keyboard."""
     if not isinstance(raw, list) or not raw:

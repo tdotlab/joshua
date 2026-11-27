@@ -4,12 +4,13 @@ import time
 from dataclasses import dataclass
 
 from . import JoshuaError
-from . import capture, hold, keyboard, process, timeline, window
+from . import capture, hold, keyboard, process, timeline, trial, window
 from . import win32 as api
 
 IDLE_BEFORE_TAKING_FOCUS_MS = 2000
 IDLE_WAIT_SECONDS = 15
 COMPOSE_SECONDS = 0.08
+FOCUS_SETTLE_SECONDS = 0.5  # coming forward redraws the game, which must not pass for movement
 STEAM_WAIT_SECONDS = 240  # Steam, then perhaps a publisher's launcher, then the game
 STEAM_POLL_SECONDS = 1
 
@@ -26,6 +27,7 @@ class Result:
     no_frame: str | None = None  # why there is no new screenshot
     state: str = "frozen"        # frozen, paused, running, unheld or exited
     warning: str | None = None
+    window_age: int | None = None  # for an unheld game started here: seconds since its window appeared
 
 
 class Session:
@@ -35,6 +37,7 @@ class Session:
         self.launched = launched
         self.frame = None
         self.hwnd = None
+        self.appeared = None  # when the window of a game started here first showed
         self.activity = keyboard.UserActivity()
         self.hold = hold.for_game(game, proc)
 
@@ -79,6 +82,7 @@ class Session:
             session = cls(game, proc, launched)
             session._wait_for_window()
             if launched:
+                session.appeared = time.monotonic()
                 time.sleep(game.startup_ms / 1000)
             result = session.step([], settle_ms=settle_ms)
         except BaseException as error:
@@ -181,16 +185,21 @@ class Session:
             raise JoshuaError("Windows would not bring the game forward. Ask the user to click the game"
                                    " window, then try again.")
 
-    def _tap(self, keys):
-        """Press keys together in the focused game, then give it time to react.
+    def _press(self, keys, ms):
+        """Press keys together in the focused game for ms.
 
         Returns (whether anything was pressed, why it stopped early or None).
         """
         player = self._player()
-        _, problem = player.play([timeline.Segment(ms=self.game.pause_ms, keys=tuple(keys))])
-        if player.sent_any:
-            time.sleep(self.game.pause_ms / 1000)
+        _, problem = player.play([timeline.Segment(ms=ms, keys=tuple(keys))])
         return player.sent_any, problem
+
+    def _tap(self, keys):
+        """Press the pause or resume keys, then give the game time to react. Returns what _press does."""
+        pressed, problem = self._press(keys, self.game.pause_ms)
+        if pressed:
+            time.sleep(self.game.pause_ms / 1000)
+        return pressed, problem
 
     def step(self, segments, settle_ms=100):
         """Let the game run, play the segments, hold it still again and photograph it."""
@@ -210,10 +219,8 @@ class Session:
             time.sleep(settle_ms / 1000)
             if self.process.alive() and window.is_foreground(self.process.pid):
                 # Hit-testing needs the game running, so it happens before holding.
-                cover = window.window_at_points(self.hwnd, self.process.pid)
-                if cover:
-                    hidden = f"the game is not fully visible: {cover}"
-                elif self.hold.capture_first:
+                hidden = self._covered()
+                if not hidden and self.hold.capture_first:
                     frame, hidden = self._photograph()
             elif self.hold.capture_first:
                 hidden = "the game is not in front"
@@ -231,7 +238,24 @@ class Session:
             warning, newer = self._check_still(frame)
             if newer:
                 frame = newer
-        return Result(frame, played, ran, stopped, hidden, self.hold.state(), warning)
+        age = None
+        if self.hold.kind == "none" and self.appeared is not None:
+            age = round(time.monotonic() - self.appeared)
+        return Result(frame, played, ran, stopped, hidden, self.hold.state(), warning, age)
+
+    def try_pause(self, pause_key, resume_key, pause_ms, watch_ms):
+        """For setting up an unheld game: see whether a key pauses it. Returns a trial.Trial."""
+        if self.hold.kind != "none":
+            raise JoshuaError("try_pause is for setting up a game listed with \"hold\": \"none\". This one is"
+                              " already held; the user can change that in games.json.")
+        if not self.process.alive():
+            raise JoshuaError("the game is no longer running")
+        self.hwnd = window.find(self.process.pid, self.game.window_title) or self.hwnd
+        self._wait_until_idle()
+        self._focus()
+        time.sleep(FOCUS_SETTLE_SECONDS)
+        return trial.run(self._look_while_running, lambda keys: self._press(keys, pause_ms), self._guard,
+                         pause_key, resume_key, watch_ms)
 
     def repause(self):
         """Press the pause key once more, for a toggle that got out of step with the game.
@@ -277,6 +301,19 @@ class Session:
             return "the game is not in front"
         cover = window.window_above(self.hwnd, self.process.pid)
         return f"the game is not fully visible: {cover}" if cover else None
+
+    def _covered(self):
+        """The hit-test half of the check, which needs the game's process running."""
+        cover = window.window_at_points(self.hwnd, self.process.pid)
+        return f"the game is not fully visible: {cover}" if cover else None
+
+    def _look_while_running(self):
+        """A photograph with both checks, for a game that is never held. Returns (frame, problem)."""
+        if window.is_foreground(self.process.pid):
+            problem = self._covered()
+            if problem:
+                return None, problem
+        return self._photograph()
 
     def _photograph(self, keep=True):
         """Capture the game's area, only if nothing else can be in the picture."""

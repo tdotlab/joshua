@@ -7,9 +7,10 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 ## Verified
 
-- Safe tests: 83 pass, 4 opt-in tests skipped. They cover step parsing, key
+- Safe tests: 107 pass, 6 opt-in tests skipped. They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
-  calls replaced), PNG encoding and corner masking, config, the MCP protocol
+  calls replaced), pause-key trials against a pretend game and clock, PNG
+  encoding, comparison and corner masking, config, the MCP protocol
   including the real server over stdio and HTTP, whose turn it is (takeover,
   expiry, a second process), the network server's refusals, coordinate mapping,
   covering-window wording, starting a program, and the Steam
@@ -18,7 +19,9 @@ Network mode and the one-player lock are built; no other machine has connected.
   loopback, played `tests/pausebox.py` with `"hold": "pause_key"`. Window
   finding, focus, scan-code input, the pause key, screen capture and closing all
   worked. The game did not advance between steps, and a toggle started out of
-  step was detected by the picture comparison and fixed by `repause`.
+  step was detected by the picture comparison and fixed by `repause`. Listed with
+  `"hold": "none"`, `try_pause` reported a useless key as still moving and found
+  P; the settings it printed then held the game.
 - Network mode with the official MCP Python SDK 2.0.0 as client, on loopback:
   handshake, ping, tool list, calls from two clients at once and a wrong token,
   with no game launched. Ctrl+C stops the server cleanly. Started with no
@@ -64,6 +67,7 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 ## Not verified
 
+- `try_pause` on any real game, and whether an agent judges its pictures well.
 - A connection from another machine: Windows Firewall, tailnet access rules,
   Hermes itself, and whether its model receives the screenshots as pictures.
 - A real game played from another machine.
@@ -91,6 +95,9 @@ Network mode and the one-player lock are built; no other machine has connected.
   `pause_ms` before and after).
 
 ## Next
+
+Have an agent in a fresh session set up a real game from a `"hold": "none"`
+entry with `try_pause`, and fix whatever it trips on.
 
 Connect Hermes from the laptop: list the games, then start one and check what
 the model says it sees.

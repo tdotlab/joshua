@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 import support
-from joshua import JoshuaError, capture, config, hold, keyboard, process, timeline, window
+from joshua import JoshuaError, capture, config, hold, keyboard, process, timeline, trial, window
 from joshua import session as session_module
 from joshua.lock import PlayerLock
 from joshua.server import Server
@@ -139,6 +139,210 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(capture.corner_radius(96, 1.0), 8)
         self.assertEqual(capture.corner_radius(144, 1.0), 12)
         self.assertEqual(capture.corner_radius(96, 0.5), 5)   # halved, plus one for blended edges
+
+
+def picture(width=8, height=6, *lit):
+    """A real black frame with the given (x, y) pixels turned white."""
+    pixels = bytearray(width * height * 4)
+    for x, y in lit:
+        pixels[(y * width + x) * 4:(y * width + x) * 4 + 3] = b"\xff\xff\xff"
+    return capture.Frame(capture.encode_png(width, height, pixels), width, height, width, height, not lit)
+
+
+class DifferenceTests(unittest.TestCase):
+    def test_the_same_pixels_are_no_change(self):
+        self.assertIsNone(capture.difference(picture(8, 6, (1, 1)), picture(8, 6, (1, 1))))
+
+    def test_counts_and_bounds_what_changed(self):
+        change = capture.difference(picture(8, 6, (2, 1)), picture(8, 6, (5, 4)))
+        self.assertEqual((change.pixels, change.total, change.box), (2, 48, (2, 1, 6, 5)))
+
+    def test_one_colour_channel_is_enough(self):
+        pixels = bytearray(8 * 6 * 4)
+        pixels[(3 * 8 + 7) * 4 + 1] = 1  # the faintest green, in the last column
+        faint = capture.Frame(capture.encode_png(8, 6, pixels), 8, 6, 8, 6, False)
+        change = capture.difference(picture(), faint)
+        self.assertEqual((change.pixels, change.box), (1, (7, 3, 8, 4)))
+
+    def test_a_new_size_is_a_whole_change(self):
+        change = capture.difference(picture(8, 6), picture(4, 3))
+        self.assertEqual((change.pixels, change.box), (12, (0, 0, 4, 3)))
+
+
+class World:
+    """A pretend game under a pretend clock, for trying pause keys.
+
+    A dot crosses the top row while the game runs. P pauses it, `lag` seconds
+    later. With `overlay`, a pixel in the bottom row blinks whatever happens.
+    """
+
+    def __init__(self, toggles="p", lag=0.0, overlay=False, moving=True):
+        self.toggles, self.lag, self.overlay, self.moving = toggles, lag, overlay, moving
+        self.now = 0.0
+        self.paused_at = None
+        self.ran = 0.0  # game time before the current run
+        self.since = 0.0
+        self.pressed = []
+        self.stop_when = lambda: None
+        self.cover_when = lambda: None
+        self.send = (True, None)
+
+    def clock(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    def game_time(self):
+        until = self.now if self.paused_at is None else min(self.now, self.paused_at)
+        return self.ran + (max(0.0, until - self.since) if self.moving else 0.0)
+
+    def look(self):
+        problem = self.cover_when()
+        if problem:
+            return None, problem
+        lit = [(int(self.game_time() * 10) % 16, 0)]
+        if self.overlay and int(self.now * 4) % 2:
+            lit.append((15, 8))
+        return picture(16, 9, *lit), None
+
+    def press(self, keys):
+        self.pressed.append("+".join(keys))
+        if self.send[0] and "+".join(keys) == self.toggles:
+            if self.paused_at is None:
+                self.paused_at = self.now + self.lag
+            else:
+                self.ran, self.since, self.paused_at = self.game_time(), self.now, None
+        return self.send
+
+    def run(self, pause_key=("p",), resume_key=None, watch_ms=3000):
+        return trial.run(self.look, self.press, self.stop_when, pause_key, resume_key or pause_key, watch_ms,
+                         clock=self.clock, sleep=self.sleep)
+
+
+class TrialTests(unittest.TestCase):
+    def said(self, found, pause_key=("p",), resume_key=None, pause_ms=100):
+        parts = trial.report("toy", found, pause_key, resume_key or pause_key, pause_ms)
+        return " ".join(p for p in parts if isinstance(p, str)), [p for p in parts if not isinstance(p, str)]
+
+    def offered(self, text):
+        return json.loads(text[text.index("{"):text.index("}") + 1])
+
+    def test_a_key_that_pauses_is_confirmed_both_ways(self):
+        world = World()
+        found = world.run()
+        self.assertEqual((found.verdict, found.came_back, found.problem), ("stopped", True, None))
+        self.assertEqual(world.pressed, ["p", "p"])
+        self.assertIsNone(world.paused_at, "the game was left paused")
+        text, pictures = self.said(found)
+        self.assertEqual(self.offered(text), {"hold": "pause_key", "pause_key": "p"})
+        self.assertIn("never edits games.json", text)
+        self.assertEqual(len(pictures), 2)
+
+    def test_a_key_that_does_nothing_is_reported_as_still_moving(self):
+        world = World()
+        found = world.run(pause_key=("o",))
+        self.assertEqual(found.verdict, "changing")
+        self.assertEqual(world.pressed, ["o", "o"])
+        self.assertEqual(found.leftover.box[1::2], (0, 1))  # the dot's row
+        text, pictures = self.said(found, ("o",))
+        self.assertIn("still changing", text)
+        self.assertIn("Only if", text)
+        self.assertIs(self.offered(text)["check_pause"], False)
+        self.assertEqual(len(pictures), 4)
+        self.assertNotEqual(pictures[1].png, pictures[2].png)  # the two taken while it should be paused
+
+    def test_a_blinking_overlay_is_shown_as_a_small_area(self):
+        found = World(overlay=True).run()
+        self.assertEqual(found.verdict, "changing")
+        self.assertEqual(found.leftover.box, (15, 8, 16, 9))
+        self.assertIn("x 15-15, y 8-8", self.said(found)[0])
+
+    def test_nothing_is_pressed_when_nothing_moves(self):
+        world = World(moving=False)
+        found = world.run()
+        self.assertEqual(found.verdict, "already_still")
+        self.assertEqual(world.pressed, [])
+        self.assertIn("Nothing was pressed", self.said(found)[0])
+
+    def test_a_slow_pause_asks_for_a_longer_pause_ms(self):
+        found = World(lag=0.6).run()
+        self.assertEqual(found.verdict, "stopped")
+        self.assertTrue(500 <= found.settled_ms <= 800, found.settled_ms)
+        needed = trial.suggested_pause_ms(100, found.settled_ms)
+        self.assertGreaterEqual(needed, found.settled_ms)
+        text, _ = self.said(found)
+        self.assertIn(f"again with pause_ms {needed}", text)
+        self.assertEqual(self.offered(text)["pause_ms"], needed)
+
+    def test_quick_settling_keeps_the_pause_ms_used(self):
+        self.assertEqual(trial.suggested_pause_ms(100, 0), 100)
+        self.assertEqual(trial.suggested_pause_ms(100, 150), 100)
+        self.assertEqual(trial.suggested_pause_ms(100, 410), 450)
+        self.assertEqual(trial.suggested_pause_ms(100, 9000), 2000)
+
+    def test_a_pause_that_lands_late_in_the_watch_is_not_called_stopped(self):
+        found = World(lag=2.5).run(watch_ms=3000)
+        self.assertEqual(found.verdict, "changing")
+
+    def test_a_key_that_cannot_resume_gets_no_settings(self):
+        world = World()
+        found = world.run(resume_key=("o",))
+        self.assertEqual((found.verdict, found.came_back), ("stopped", False))
+        self.assertEqual(world.pressed, ["p", "o"])
+        text, pictures = self.said(found, resume_key=("o",))
+        self.assertIn("not confirmed", text)
+        self.assertNotIn("{", text)
+        self.assertEqual(len(pictures), 3)
+
+    def test_a_game_that_only_stops_on_the_second_press_gets_no_settings(self):
+        world = World()
+        presses = []
+
+        def press(keys):  # the first press is swallowed, as during a loading screen
+            presses.append(keys)
+            return world.press(keys) if len(presses) > 1 else (True, None)
+
+        found = trial.run(world.look, press, world.stop_when, ("p",), ("p",), 3000,
+                          clock=world.clock, sleep=world.sleep)
+        self.assertEqual((found.verdict, found.came_back), ("changing", False))
+        text, _ = self.said(found)
+        self.assertIn("may be paused now", text)
+        self.assertNotIn("{", text)
+
+    def test_a_separate_resume_key_is_kept_in_the_settings(self):
+        self.assertEqual(trial.settings(("f5",), ("alt", "f6"), 100),
+                         {"hold": "pause_key", "pause_key": "f5", "resume_key": ["alt", "f6"]})
+
+    def test_an_unsent_key_ends_the_trial(self):
+        world = World()
+        world.send = (False, "the game lost focus")
+        found = world.run()
+        self.assertEqual((found.verdict, found.pressed, world.pressed), (None, False, ["p"]))
+        self.assertIn("Nothing was pressed", self.said(found)[0])
+
+    def test_nothing_more_is_sent_after_the_user_steps_in(self):
+        world = World()
+        world.stop_when = lambda: "the user pressed Ctrl+Alt+F12" if world.pressed else None
+        found = world.run()
+        self.assertEqual(world.pressed, ["p"])
+        self.assertTrue(found.pressed)
+        text, _ = self.said(found)
+        self.assertIn("Ctrl+Alt+F12", text)
+        self.assertIn("may be paused", text)
+
+    def test_a_window_appearing_over_the_game_ends_the_trial(self):
+        world = World()
+        world.cover_when = lambda: "covered" if world.now > 2 else None
+        found = world.run()
+        self.assertEqual((found.problem, world.pressed), ("covered", ["p"]))
+
+    def test_an_interruption_after_resuming_offers_no_settings(self):
+        world = World()
+        world.cover_when = lambda: "covered" if len(world.pressed) == 2 else None
+        found = world.run()
+        self.assertEqual((found.verdict, found.resumed, found.problem), ("stopped", True, "covered"))
+        self.assertNotIn("{", self.said(found)[0])
 
 
 class SessionTests(unittest.TestCase):
@@ -348,6 +552,39 @@ class SessionStepTests(unittest.TestCase):
         result = session.step(timeline.parse([{"ms": 20, "keys": ["w"]}]), settle_ms=0)
         self.assertEqual(self.events, ["idle", "focus", "w down", "w up", "photo"])
         self.assertEqual(result.state, "unheld")
+
+    def test_only_an_unheld_game_can_be_tried(self):
+        for settings in ({"hold": "freeze"}, {"hold": "pause_key", "pause_key": ("p",)}):
+            with self.subTest(settings), self.assertRaisesRegex(JoshuaError, "already held"):
+                self.make(**settings).try_pause(("p",), ("p",), 100, 3000)
+            self.assertEqual(self.events, [])
+
+    def test_trying_a_pause_key_waits_for_the_user_and_presses_through_the_guard(self):
+        session = self.make(hold="none")
+
+        def run(look, press, guard, pause_key, resume_key, watch_ms):
+            self.assertIsNone(look()[1])
+            self.assertEqual(press(pause_key), (True, None))
+            return "found"
+
+        with mock.patch.object(trial, "run", run), \
+                mock.patch.object(session_module, "FOCUS_SETTLE_SECONDS", 0):
+            self.assertEqual(session.try_pause(("p",), ("p",), 20, 3000), "found")
+        self.assertEqual(self.events, ["idle", "focus", "photo", "p down", "p up"])
+
+    def test_a_covered_game_is_not_photographed_while_being_tried(self):
+        session = self.make(hold="none")
+        with mock.patch.object(window, "window_at_points", lambda *_: window.COVERED):
+            frame_, problem = session._look_while_running()
+        self.assertIsNone(frame_)
+        self.assertIn(window.COVERED, problem)
+        self.assertEqual(self.events, [])
+
+    def test_reports_the_window_age_of_an_unheld_game_it_started(self):
+        session = self.make(hold="none")
+        self.assertIsNone(session.step([], settle_ms=0).window_age)  # attached: age unknown
+        session.appeared = session_module.time.monotonic() - 42
+        self.assertEqual(session.step([], settle_ms=0).window_age, 42)
 
     def test_repause_presses_the_pause_key_once(self):
         session = self.make(hold="pause_key", pause_key=("p",), pause_ms=20)
@@ -563,6 +800,10 @@ class FakeSession:
     def repause(self):
         return True, Result(self.frame, 0, 0, state="paused")
 
+    def try_pause(self, pause_key, resume_key, pause_ms, watch_ms):
+        self.tried = (pause_key, resume_key, pause_ms, watch_ms)
+        return trial.Trial(verdict="already_still", before=self.frame)
+
     def close(self, close_game=False):
         self.closed.append(close_game)
         return "done"
@@ -591,7 +832,8 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(result["protocolVersion"], "2025-06-18")
         self.assertIsNone(self.server.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}))
         names = [t["name"] for t in self.server.handle(request("tools/list"))["result"]["tools"]]
-        self.assertEqual(names, ["list_games", "start_game", "step", "repause", "look", "end_session"])
+        self.assertEqual(names, ["list_games", "start_game", "step", "repause", "try_pause", "look",
+                                 "end_session"])
 
     def test_protocol_errors(self):
         self.assertEqual(self.server.handle(request("nope"))["error"]["code"], -32601)
@@ -620,6 +862,25 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(self.call("look")["isError"])
         self.assertFalse(self.call("end_session", close_game=True)["isError"])
         self.assertEqual(FakeSession.closed, [True])
+
+    def test_trying_a_pause_key(self):
+        self.call("start_game", game="toy")
+        tried = self.call("try_pause", pause_key=["Alt", "pause"])
+        self.assertFalse(tried["isError"], tried)
+        self.assertEqual(self.server.session.tried, (("alt", "pause"), ("alt", "pause"), 100, 3000))
+        self.assertEqual([part["type"] for part in tried["content"]], ["text", "text", "image"])
+        self.call("try_pause", pause_key="f5", resume_key=["f6"], pause_ms=300, watch_ms=5000)
+        self.assertEqual(self.server.session.tried, (("f5",), ("f6",), 300, 5000))
+
+    def test_trying_a_pause_key_checks_its_arguments_first(self):
+        self.call("start_game", game="toy")
+        for arguments in ({}, {"pause_key": []}, {"pause_key": ["alt", "tab"]}, {"pause_key": "windows"},
+                          {"pause_key": 5}, {"pause_key": "p", "resume_key": []},
+                          {"pause_key": "p", "pause_ms": 5}, {"pause_key": "p", "pause_ms": True},
+                          {"pause_key": "p", "watch_ms": 60000}):
+            with self.subTest(arguments):
+                self.assertTrue(self.call("try_pause", **arguments)["isError"])
+        self.assertFalse(hasattr(self.server.session, "tried"))
 
     def test_hanging_up_releases_the_game(self):
         lines = [json.dumps(request("tools/call", {"name": "start_game", "arguments": {"game": "toy"}})),

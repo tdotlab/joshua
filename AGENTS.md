@@ -9,8 +9,9 @@ Read [README.md](README.md), then [docs/STATUS.md](docs/STATUS.md).
 - `src/serve.py`: entry point
 - `src/joshua/`: `server` (MCP tools, stdio, whose turn it is), `network` (HTTP
   over Tailscale), `lock` (one player per PC), `session` (one game turn), `hold`
-  (pause key / freeze / none), `process` (launch, freeze), `window`,
-  `keyboard`, `capture`, `timeline`, `config`, `win32` (all ctypes declarations)
+  (pause key / freeze / none), `trial` (finding a game's pause key), `process`
+  (launch, freeze), `window`, `keyboard`, `capture`, `timeline`, `config`,
+  `win32` (all ctypes declarations)
 - `tests/`: `test_unit.py` and `test_network.py` are safe; `test_live.py` plays
   `pausebox.py` with real input (opt-in)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it works and why
@@ -21,8 +22,8 @@ Read [README.md](README.md), then [docs/STATUS.md](docs/STATUS.md).
 python -m unittest discover -s tests -v
 ```
 
-Live tests take the screen and keyboard for about twenty seconds; only run them
-when the user is not at the keyboard or has agreed:
+Live tests take the screen and keyboard for about a minute; only run them when
+the user is not at the keyboard or has agreed:
 
 ```powershell
 $env:JOSHUA_LIVE = "1"; python -m unittest discover -s tests -p test_live.py -v

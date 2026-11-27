@@ -13,7 +13,7 @@ import time
 import traceback
 
 from . import JoshuaError, __version__
-from . import config, timeline
+from . import config, timeline, trial
 from .lock import PlayerLock
 from .session import Session
 
@@ -25,7 +25,9 @@ INSTRUCTIONS = (
     " think; start_game says if a game is not held. Look at each screenshot, decide, then send a short step."
     " Start with short steps (200-500 ms) until you know how the game responds. Taps need about 80 ms to"
     " register. If a step reports that it stopped early or has no screenshot, the user may be using the"
-    " computer: do not retry in a loop. Only games the user listed can be played."
+    " computer: do not retry in a loop. Only games the user listed can be played. To set up a new real-time"
+    " game, the user lists it with \"hold\": \"none\"; try_pause then finds its pause settings, which the"
+    " user must approve before games.json changes."
 )
 
 HANDOVER_SECONDS = 300    # a network player quiet this long may be replaced by another
@@ -86,6 +88,25 @@ TOOLS = [
                     " running between steps, or a step warns that it may be, the pause toggle is out of step"
                     " with the game: this presses the pause key once more and returns a screenshot.",
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
+    {"name": "try_pause",
+     "description": "For setting up a game listed with \"hold\": \"none\": check whether a key pauses it. First"
+                    " use step to get into live action, somewhere safe, with something visibly moving. This then"
+                    " watches the picture move, presses the key, watches whether it stops, presses again to"
+                    " resume, and returns pictures and the games.json settings that fit. A wrong key does"
+                    " whatever it normally does, so try keys the game's controls name. A still picture is"
+                    " evidence, not proof, so judge the pictures. Joshua never edits games.json: show the user"
+                    " the settings and let them approve the change.",
+     "inputSchema": {"type": "object", "properties": {
+         "pause_key": {"type": "array", "items": {"type": "string"}, "minItems": 1,
+                       "description": "Keys pressed together, e.g. [\"p\"], [\"esc\"] or [\"alt\", \"pause\"]."},
+         "resume_key": {"type": "array", "items": {"type": "string"}, "minItems": 1,
+                        "description": "Only if a different key resumes; otherwise pause_key is pressed again."},
+         "pause_ms": {"type": "integer", "minimum": config.MIN_PAUSE_MS, "maximum": config.MAX_PAUSE_MS,
+                      "description": "How long the key is held (default 100)."},
+         "watch_ms": {"type": "integer", "minimum": trial.MIN_WATCH_MS, "maximum": trial.MAX_WATCH_MS,
+                      "description": "How long to watch after pressing (default 3000). Longer is stronger"
+                                     " evidence."},
+     }, "required": ["pause_key"], "additionalProperties": False}},
     {"name": "look",
      "description": "Return the latest screenshot again without running the game.",
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
@@ -104,6 +125,12 @@ def _text(message):
 
 def _image(frame):
     return {"type": "image", "data": base64.b64encode(frame.png).decode("ascii"), "mimeType": "image/png"}
+
+
+def _number(value, field, low, high):
+    if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
+        raise JoshuaError(f"{field} must be an integer from {low} to {high}")
+    return value
 
 
 class Server:
@@ -193,6 +220,8 @@ class Server:
             lines.append(f"Input stopped early: {result.stopped}.")
         if result.warning:
             lines.append(f"Warning: {result.warning}")
+        if result.window_age is not None:
+            lines.append(f"The game's window appeared {result.window_age} s ago.")
         content = []
         if result.frame:
             lines.append(f"Screenshot is {result.frame.width}x{result.frame.height}.")
@@ -248,20 +277,31 @@ class Server:
                     " show it still running between steps, call repause.")
         if game.hold == "none":
             return (f"{game.name} is not held still: it keeps running while you think. That suits games that"
-                    " wait for input on their own.")
+                    " wait for input on their own. If it is a real-time game still being set up, get somewhere"
+                    " safe with something moving and use try_pause to find its pause key. For startup_ms, note"
+                    " how long after its window appeared the game was first ready for that key.")
         return "This game is frozen between steps. Its clock keeps running, so it may jump forward."
 
     def tool_step(self, segments, settle_ms=100):
         session = self._require_session()
         parsed = timeline.parse(segments)
-        if not isinstance(settle_ms, int) or not 0 <= settle_ms <= 3000:
-            raise JoshuaError("settle_ms must be an integer from 0 to 3000")
+        _number(settle_ms, "settle_ms", 0, 3000)
         return self._describe(session.step(parsed, settle_ms=settle_ms))
 
     def tool_repause(self):
         pressed, result = self._require_session().repause()
         return self._describe(result, "The pause key was pressed again." if pressed
                               else "The pause key was not pressed.")
+
+    def tool_try_pause(self, pause_key, resume_key=None, pause_ms=100, watch_ms=trial.DEFAULT_WATCH_MS):
+        session = self._require_session()
+        keys = timeline.chord(pause_key, "pause_key")
+        back = keys if resume_key is None else timeline.chord(resume_key, "resume_key")
+        _number(pause_ms, "pause_ms", config.MIN_PAUSE_MS, config.MAX_PAUSE_MS)
+        _number(watch_ms, "watch_ms", trial.MIN_WATCH_MS, trial.MAX_WATCH_MS)
+        found = session.try_pause(keys, back, pause_ms, watch_ms)
+        report = trial.report(session.game.name, found, keys, back, pause_ms)
+        return [_text(part) if isinstance(part, str) else _image(part) for part in report]
 
     def tool_look(self):
         session = self._require_session()

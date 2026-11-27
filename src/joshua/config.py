@@ -13,6 +13,7 @@ PROJECT = Path(__file__).resolve().parents[2]
 HOLDS = ("pause_key", "freeze", "none")
 CAPTURES = ("after_pause", "before_pause")
 _PAUSE_ONLY = ("pause_key", "resume_key", "pause_ms", "capture", "check_pause")
+MIN_PAUSE_MS, MAX_PAUSE_MS = 20, 2000
 
 
 @dataclass(frozen=True)
@@ -47,15 +48,11 @@ def _expect(entry, key, kind, default, name):
 
 
 def _chord(entry, key, name):
-    """A key name, or a list of names pressed together, checked like agent input."""
+    """The key or keys a setting names, or none if it is absent."""
     value = entry.get(key)
     if value is None:
         return ()
-    names = [value] if isinstance(value, str) else value
-    try:
-        return timeline.parse([{"ms": 100, "keys": names}])[0].keys
-    except JoshuaError as error:
-        raise JoshuaError(f"games.json: {name}.{key} is not usable: {error}") from None
+    return timeline.chord(value, f"games.json: {name}.{key}")
 
 
 def _hold_settings(entry, name):
@@ -65,7 +62,8 @@ def _hold_settings(entry, name):
             f"games.json: {name} needs \"hold\": how to keep the game still between steps. \"pause_key\":"
             " the game pauses itself with its own key (preferred: nothing is injected or suspended)."
             " \"freeze\": suspend the process (works for any game; antivirus software may object)."
-            " \"none\": the game keeps running while the agent thinks (turn-based games).")
+            " \"none\": the game keeps running while the agent thinks (turn-based games). To find a game's"
+            " pause key, list it with \"none\" and have the agent use try_pause.")
     if hold != "pause_key":
         stray = [key for key in _PAUSE_ONLY if key in entry]
         if stray:
@@ -75,8 +73,8 @@ def _hold_settings(entry, name):
     if not pause_key:
         raise JoshuaError(f"games.json: {name} uses \"hold\": \"pause_key\", so it needs \"pause_key\"")
     pause_ms = _expect(entry, "pause_ms", int, 100, name)
-    if not 20 <= pause_ms <= 2000:
-        raise JoshuaError(f"games.json: {name}.pause_ms must be from 20 to 2000")
+    if not MIN_PAUSE_MS <= pause_ms <= MAX_PAUSE_MS:
+        raise JoshuaError(f"games.json: {name}.pause_ms must be from {MIN_PAUSE_MS} to {MAX_PAUSE_MS}")
     capture = entry.get("capture", "after_pause")
     if capture not in CAPTURES:
         raise JoshuaError(f"games.json: {name}.capture must be \"after_pause\" or \"before_pause\"")

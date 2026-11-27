@@ -43,13 +43,16 @@ class LiveTests(unittest.TestCase):
         for pid in set(process.find_running(self.pythonw)) - self.before:
             process.kill(pid)
 
-    def serve(self, *extra):
+    def write_games(self, holding, *extra):
         games = self.directory / "games.json"
         games.write_text(json.dumps({"pausebox": {
             "exe": str(self.pythonw), "args": [str(HERE / "pausebox.py"), str(self.state_path), *extra],
-            "hold": "pause_key", "pause_key": "p", "startup_ms": 1500, "window_title": "pausebox",
-            "notes": "Arrows move the box.",
+            **holding, "startup_ms": 1500, "window_title": "pausebox", "notes": "Arrows move the box.",
         }}), encoding="utf-8")
+        return games
+
+    def serve(self, *extra, holding=None):
+        games = self.write_games(holding or {"hold": "pause_key", "pause_key": "p"}, *extra)
         log = open(self.directory / "server.log", "w", encoding="utf-8")
         self.addCleanup(log.close)
         self.start_server({**os.environ, "JOSHUA_GAMES": str(games)}, log)
@@ -127,6 +130,38 @@ class LiveTests(unittest.TestCase):
         error, text, _ = self.call("end_session", close_game=True)
         self.assertFalse(error, text)
         self.assertIn("the game closed", text)
+
+    def test_finding_the_pause_key(self):
+        self.serve(holding={"hold": "none"})
+        error, text, _ = self.call("start_game", game="pausebox")
+        self.assertFalse(error, text)
+        self.assertIn("is not held still", text)
+        self.assertIn("window appeared", text)
+
+        error, text, _ = self.call("try_pause", pause_key=["o"])  # does nothing in this game
+        self.assertFalse(error, text)
+        self.assertIn("still changing", text)
+        self.assertEqual(self.state()["toggles"], 0)
+
+        error, text, images = self.call("try_pause", pause_key=["p"])
+        self.assertFalse(error, text)
+        self.assertIn("then stayed identical", text)
+        self.assertIn("the picture moved again", text)
+        self.assertEqual(len(images), 2)
+        after = self.state()
+        self.assertEqual((after["toggles"], after["paused"]), (2, False))
+        found = json.loads(text[text.index("{"):text.index("}") + 1])
+        self.assertEqual(found, {"hold": "pause_key", "pause_key": "p"})
+
+        # What the user does with the answer: approve it, and the game is now held.
+        error, text, _ = self.call("end_session")
+        self.assertFalse(error, text)
+        self.write_games(found)
+        error, text, _ = self.call("start_game", game="pausebox")
+        self.assertFalse(error, text)
+        self.assertIn("is now paused", text)
+        self.assertNotIn("Warning", text)
+        self.assert_held()
 
     def test_a_toggle_out_of_step_is_caught_and_fixed(self):
         # The game starts paused, so the first press of P resumes it instead.
