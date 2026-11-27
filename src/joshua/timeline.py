@@ -116,6 +116,8 @@ def parse(raw):
         for modifiers, others in _FORBIDDEN:
             if modifiers & set(keys) and others & set(keys):
                 raise JoshuaError(f"segment {index}: that key combination would leave the game")
+        if _ALT & set(keys) and "f4" in keys:  # end_session decides whether the game closes
+            raise JoshuaError(f"segment {index}: Alt+F4 would close the game; use end_session")
         if _ALT & set(keys) and _CTRL & set(keys) and "f12" in keys:
             raise JoshuaError(f"segment {index}: Ctrl+Alt+F12 is reserved for the user's abort")
         segments.append(Segment(

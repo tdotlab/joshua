@@ -404,6 +404,8 @@ pixels, `mouse_move` is relative motion for camera control or a captured mouse.
 Key names include letters, digits, `up`, `enter`, `esc`, `space`, `shift`,
 `ctrl`, `alt`, `f1` to `f12` and `pause`; the full list is in
 `src/joshua/timeline.py`. One step is at most 15 seconds and 60 segments.
+Combinations that leave or close the game are refused: Alt with Tab, Esc, Space
+or F4, Ctrl+Esc, and Ctrl+Alt+F12 (the user's abort).
 
 ## Behavior to expect
 

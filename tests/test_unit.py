@@ -51,6 +51,13 @@ class TimelineTests(unittest.TestCase):
             with self.subTest(name), self.assertRaises(JoshuaError):
                 timeline.parse(raw)
 
+    def test_alt_f4_cannot_close_the_game(self):
+        # end_session leaves open a game the user started; Alt+F4 must not get around that
+        for alt in ("alt", "rightalt"):
+            with self.subTest(alt), self.assertRaisesRegex(JoshuaError, "end_session"):
+                timeline.parse([{"ms": 100, "keys": [alt, "f4"]}])
+        self.assertEqual(timeline.parse([{"ms": 100, "keys": ["f4"]}])[0].keys, ("f4",))
+
 
 class PlayerTests(unittest.TestCase):
     def setUp(self):
@@ -458,6 +465,20 @@ class PauseHoldTests(unittest.TestCase):
         pause.check(timeline.parse([{"ms": 100, "keys": ["p"]}]))  # p alone is fine
         with self.assertRaises(JoshuaError):
             pause.check(timeline.parse([{"ms": 100, "keys": ["p", "shift", "up"]}]))
+
+
+class FreezeHoldTests(unittest.TestCase):
+    def test_a_freeze_that_fails_is_a_warning_not_a_lost_step(self):
+        # Like a pause that did not happen: the step keeps its picture and says the game is running.
+        process = mock.Mock(frozen=False)
+        process.alive.return_value = True
+        process.freeze.side_effect = JoshuaError("could not freeze the game (0xc0000001)")
+        freeze = hold.Freeze(process)
+        freeze.wake()
+        self.assertIn("still running", freeze.hold(lambda keys: (True, None)))
+        self.assertEqual(freeze.state(), "running")
+        process.frozen = True
+        self.assertEqual(freeze.state(), "frozen")
 
 
 class SessionStepTests(unittest.TestCase):

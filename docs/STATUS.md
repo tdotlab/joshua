@@ -19,7 +19,7 @@ Playwright; the project's `.venv` has it.
     Chromium: the hold, exact game time, longer frames, captured-mouse look and
     Esc, contained and reported misbehaviour, WebRTC gone from every frame, the
     memory limit, and no processes left behind. All pass on Windows with the
-    `.venv` Python (156 tests in all, 6 opt-in skipped).
+    `.venv` Python (158 tests in all, 6 opt-in skipped).
   - Linux, python:3.12-slim in Docker, before the audit: the safe tests passed
     (31, Windows ones skipped), root is refused without
     `JOSHUA_BROWSER_NO_SANDBOX=1`, and with it the 7 live tests then present
@@ -31,7 +31,7 @@ Playwright; the project's `.venv` has it.
     0.2 s of real time, mouse look after a click captured the pointer, and
     `end_session` closed the browser. Killing a server outright took Chromium
     with it.
-- Safe tests (system Python, no Playwright): 156 run, 14 skipped (6 opt-in
+- Safe tests (system Python, no Playwright): 158 run, 14 skipped (6 opt-in
   window tests, 8 browser live tests), in about 3 s. They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
   calls replaced), pause-key trials against a pretend game and clock, PNG
@@ -49,8 +49,11 @@ Playwright; the project's `.venv` has it.
   left open when the turn bookkeeping failed; `startup_ms` and `max_width`
   without bounds (a huge `startup_ms` blocked the server); a failed launch
   stopping the game by pid rather than by the handle held; and a test that
-  passed for the wrong reason after a 20 s wait. The live window tests were not
-  rerun after it.
+  passed for the wrong reason after a 20 s wait. A second pass over the hold,
+  trial, lock and input code refused Alt+F4 (an agent could close a game the
+  user had started, which `end_session` will not do) and made a failed freeze a
+  warning, as a failed pause already was, instead of an error that lost the
+  step. The live window tests were not rerun after either pass.
 - Live tests (`JOSHUA_LIVE=1`), last passed 2026-11-27: the real server, over stdio and over HTTP on
   loopback, played `tests/pausebox.py` with `"hold": "pause_key"`. Window
   finding, focus, scan-code input, the pause key, screen capture and closing all

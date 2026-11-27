@@ -110,7 +110,7 @@ class Freeze(_Timed):
         self._process = process
 
     def state(self):
-        return "frozen"
+        return "frozen" if self._process.frozen else "running"
 
     def wake(self):
         # Before focusing: a suspended window cannot come forward.
@@ -121,10 +121,15 @@ class Freeze(_Timed):
         return None
 
     def hold(self, tap):
-        if self._process.alive():
-            self._process.freeze()
+        # Runs in a step's `finally`: raising here would lose the step's picture, or hide why it failed.
+        problem = None
+        try:
+            if self._process.alive():
+                self._process.freeze()
+        except JoshuaError as error:
+            problem = f"the game could not be frozen and is still running ({error})"
         self._stop_clock()
-        return None
+        return problem
 
     def letting_go(self):
         return "the game is running normally again"
