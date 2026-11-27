@@ -863,6 +863,14 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(self.call("end_session", close_game=True)["isError"])
         self.assertEqual(FakeSession.closed, [True])
 
+    def test_look_does_not_call_an_unheld_game_still(self):
+        self.call("start_game", game="toy")
+        self.assertIn("has not run since", self.call("look")["content"][0]["text"])
+        self.server.session.game = config.Game("toy", Path("toy.exe"), hold="none")
+        said = self.call("look")["content"][0]["text"]
+        self.assertNotIn("has not run", said)
+        self.assertIn("kept running since", said)
+
     def test_trying_a_pause_key(self):
         self.call("start_game", game="toy")
         tried = self.call("try_pause", pause_key=["Alt", "pause"])

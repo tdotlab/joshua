@@ -307,8 +307,12 @@ class Server:
         session = self._require_session()
         if not session.frame:
             raise JoshuaError("there is no screenshot yet")
-        return [_text("Latest screenshot; the game has not run since unless a step reported otherwise."),
-                _image(session.frame)]
+        if session.game.hold == "none":
+            said = ("Latest screenshot, from an earlier call. This game is not held, so it has kept running"
+                    " since; a step with only a wait takes a current one.")
+        else:
+            said = "Latest screenshot; the game has not run since unless a step reported otherwise."
+        return [_text(said), _image(session.frame)]
 
     def tool_end_session(self, close_game=False):
         self._require_session()

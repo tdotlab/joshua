@@ -1,13 +1,13 @@
 # Status
 
-As of 2026-11-26. Experimental. Registered with Claude Code (user scope) as
+As of 2026-11-27. Experimental. Registered with Claude Code (user scope) as
 `joshua`, with a local `games.json` listing Daggerfall and Redguard. The server
 connects and lists them; no agent has played through that registration yet.
 Network mode and the one-player lock are built; no other machine has connected.
 
 ## Verified
 
-- Safe tests: 107 pass, 6 opt-in tests skipped. They cover step parsing, key
+- Safe tests: 108 pass, 6 opt-in tests skipped. They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
   calls replaced), pause-key trials against a pretend game and clock, PNG
   encoding, comparison and corner masking, config, the MCP protocol
@@ -36,6 +36,16 @@ Network mode and the one-player lock are built; no other machine has connected.
     paused the picture, animated water included, was identical. Walking forward
     in steps brought the player up to the opponent.
   - Both closed cleanly from the paused state.
+- `try_pause` on Daggerfall, listed with `"hold": "none"` in a temporary config
+  and run by Claude Code from a script driving the server, in live play with an
+  animated campfire in view:
+  - P (not a pause key) was reported as still changing.
+  - Alt+Pause was reported as stopped, then moving again, with the settings the
+    real `games.json` already uses. With those in the temporary config, attaching
+    paused the game and a step turned the view and paused it again.
+  - Esc was also reported as stopped and moving again: it opens and closes the
+    options menu. The report offered `"pause_key": "esc"`; the picture showed the
+    menu.
 - GTA IV: The Complete Edition, started with `steam_appid` through the Rockstar
   launcher (already signed in), windowed at 1280x720 by `commandline.txt`, over
   the HTTP transport on loopback:
@@ -67,7 +77,7 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 ## Not verified
 
-- `try_pause` on any real game, and whether an agent judges its pictures well.
+- `try_pause` set-up by an agent that does not already know the answer.
 - A connection from another machine: Windows Firewall, tailnet access rules,
   Hermes itself, and whether its model receives the screenshots as pictures.
 - A real game played from another machine.
@@ -85,6 +95,10 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 ## Known gaps
 
+- `try_pause` cannot tell a pause from a menu that stops the game. The agent has
+  to see it in the picture and prefer a dedicated pause key.
+- For a key that left the whole view moving (P in Daggerfall, 26% of pixels),
+  the report still prints the conditional `"check_pause": false` settings.
 - Once, Windows refused to bring a freshly launched DOSBox forward and the start
   failed; the retry and later launches worked. The cause was not found.
 - A captured mouse (DOSBox) has no absolute positioning: the agent steers by
@@ -96,8 +110,8 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 ## Next
 
-Have an agent in a fresh session set up a real game from a `"hold": "none"`
-entry with `try_pause`, and fix whatever it trips on.
+Have an agent in a fresh session set up a game whose pause key nobody has told
+it, from a `"hold": "none"` entry, and fix whatever it trips on.
 
 Connect Hermes from the laptop: list the games, then start one and check what
 the model says it sees.
