@@ -14,8 +14,8 @@ Read [README.md](README.md), then [docs/STATUS.md](docs/STATUS.md).
   (launch, freeze), `window`, `keyboard`, `capture`, `timeline`, `config`,
   `win32` (all ctypes declarations), `result` (what a turn returns), `browser`
   (browser games), `proctree` (process tree and memory, Windows and Linux)
-- `tests/`: `test_unit.py`, `test_network.py` and `test_browser.py` are safe
-  (the first two skip off Windows); `test_live.py` plays `pausebox.py` with real
+- `tests/`: `test_unit.py`, `test_network.py`, `test_browser.py` and
+  `test_server.py` are safe (the first two skip off Windows); `test_live.py` plays `pausebox.py` with real
   input (opt-in); `test_browser_live.py` plays `browserpage.html` headless,
   whenever Playwright is installed
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it works and why

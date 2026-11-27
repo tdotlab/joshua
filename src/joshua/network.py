@@ -203,7 +203,7 @@ class _Handler(BaseHTTPRequestHandler):
             params = message.get("params")
             name = params.get("name") if isinstance(params, dict) else None
             print(f"joshua: {self.client_address[0]} calls {str(name)[:40]!r}", file=sys.stderr)
-        response = self.server.player.handle(message, client=client)
+        response = self.server.player.respond(message, client=client)
         if response is None:
             return self._reply(202)
         return self._reply(200, response, headers)

@@ -83,6 +83,22 @@ class PlayerTests(unittest.TestCase):
                 timeline.parse([{"ms": 20, "keys": ["w"], "buttons": ["left"]}]))
         self.assertEqual([up for _, up in self.releases()], [False, True])
 
+    def test_one_release_that_fails_does_not_keep_the_others_held(self):
+        attempts = []
+
+        def send(*events):
+            attempts.extend(events)
+            ups = [e for e in attempts if e.type == 1 and e.ki.dwFlags & 0x0002]
+            if len(ups) == 1 and events[0] is ups[0]:
+                raise JoshuaError("Windows blocked the input")
+            self.sent.extend(events)
+
+        with mock.patch.object(keyboard, "_send", send), self.assertRaisesRegex(JoshuaError, "blocked"):
+            self.player().play(timeline.parse([{"ms": 20, "keys": ["w", "a", "shift"], "buttons": ["left"]}]))
+        attempted_ups = [e.ki.wScan for e in attempts if e.type == 1 and e.ki.dwFlags & 0x0002]
+        self.assertEqual(sorted(attempted_ups), sorted(timeline.KEYS[k][0] for k in ("w", "a", "shift")))
+        self.assertEqual(len([e for e in attempts if e.type == 0]), 2)  # the button went down and up
+
     def test_the_pause_key_is_sent_as_a_virtual_key(self):
         # Pause has no usable single scan code: scan 0x45 on its own reads as Num Lock.
         self.player().play(timeline.parse([{"ms": 20, "keys": ["alt", "pause"]}]))
@@ -365,6 +381,16 @@ class SessionTests(unittest.TestCase):
                 mock.patch("joshua.capture.grab", grab):
             session._photograph()
         self.assertEqual(asked, {"area": (1, 2, 3, 4), "max_width": 640, "dpi": 144})
+
+    def test_a_window_that_vanishes_before_the_picture_is_reported(self):
+        session = Session.__new__(Session)
+        session.hwnd = 1
+        session.game = game()
+        with mock.patch.object(session, "_obstruction", lambda: None), \
+                mock.patch("joshua.window.client_area", lambda _: None), \
+                mock.patch("joshua.capture.grab") as grab:
+            self.assertEqual(session._photograph(), (None, "the game window has no visible area"))
+        grab.assert_not_called()
 
     def test_screenshot_points_map_to_screen_pixels(self):
         session = Session.__new__(Session)
@@ -682,12 +708,19 @@ class SteamStartTests(unittest.TestCase):
         self.proc.close.assert_called_once_with()
 
     def test_a_failed_first_step_still_closes_a_game_started_directly(self):
-        self.windows = {7: 1}
+        self.windows = {42: 1}  # the window belongs to the opened process, so the first step is reached
         self.step.side_effect = JoshuaError("no focus.")
+        with self.assertRaisesRegex(JoshuaError, "no focus"):
+            Session.start(config.Game("toy", Path(sys.executable), startup_ms=0))
+        self.proc.terminate.assert_called_once_with()  # through the handle held, so a reused pid is safe
+        self.kill.assert_not_called()
+        self.steam.assert_not_called()
+
+    def test_a_game_that_cannot_be_opened_is_stopped_by_its_pid(self):
+        self.opened.side_effect = JoshuaError("cannot control process 7")
         with self.assertRaises(JoshuaError):
             Session.start(config.Game("toy", Path(sys.executable), startup_ms=0))
         self.kill.assert_called_once_with(7)
-        self.steam.assert_not_called()
 
 
 class SteamRequestTests(unittest.TestCase):
@@ -732,6 +765,8 @@ class ConfigTests(unittest.TestCase):
         game = self.load({"a": {"exe": "bin/a.exe", "hold": "freeze"}})["a"]
         self.assertEqual(game.exe, (self.path.parent / "bin/a.exe").resolve())
         self.assertEqual(game.cwd, game.exe.parent)
+        game = self.load({"a": {"exe": "a.exe", "hold": "none", "startup_ms": 0, "max_width": 640}})["a"]
+        self.assertEqual((game.startup_ms, game.max_width), (0, 640))
 
     def test_reads_pause_keys(self):
         games = self.load({"a": {"exe": "a.exe", "hold": "pause_key", "pause_key": "P"},
@@ -759,6 +794,10 @@ class ConfigTests(unittest.TestCase):
         for entry in ({}, {"exe": 1}, {"exe": "a.exe"}, {"exe": "a.exe", "hold": "suspend"},
                       {"exe": "a.exe", "hold": "freeze", "hok_clock": True},
                       {"exe": "a.exe", "hold": "freeze", "startup_ms": "10"},
+                      {"exe": "a.exe", "hold": "freeze", "startup_ms": -1},
+                      {"exe": "a.exe", "hold": "freeze", "startup_ms": 10 ** 9},
+                      {"exe": "a.exe", "hold": "freeze", "max_width": 0},
+                      {"exe": "a.exe", "hold": "freeze", "max_width": 100000},
                       {"exe": "a.exe", "hold": "freeze", "args": [1]},
                       pausing, {**pausing, "pause_key": "windows"}, {**pausing, "pause_key": ["alt", "tab"]},
                       {**pausing, "pause_key": ["ctrl", "alt", "f12"]}, {**pausing, "pause_key": 5},

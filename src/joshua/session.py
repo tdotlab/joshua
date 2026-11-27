@@ -77,7 +77,13 @@ class Session:
             # A launch that failed should not leave an orphaned game behind. A game that
             # came through Steam was slow to start and can be attached to, so it stays.
             if launched and not through_steam:
-                process.kill(pid)
+                try:
+                    if proc:
+                        proc.terminate()  # through the handle held: a pid can be reused, a handle cannot
+                    else:
+                        process.kill(pid)
+                except Exception:
+                    pass  # the original failure is the one to report
             if proc:
                 proc.close()
             if through_steam and isinstance(error, JoshuaError):
@@ -308,7 +314,10 @@ class Session:
         problem = self._obstruction()
         if problem:
             return None, problem
-        frame = capture.grab(*window.client_area(self.hwnd), max_width=self.game.max_width,
+        area = window.client_area(self.hwnd)
+        if not area:  # the window closed since the check
+            return None, "the game window has no visible area"
+        frame = capture.grab(*area, max_width=self.game.max_width,
                              dpi=window.dpi(self.hwnd))
         # Something may have popped up while the picture was being taken.
         problem = self._obstruction()

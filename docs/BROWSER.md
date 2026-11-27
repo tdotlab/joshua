@@ -145,7 +145,9 @@ The properties in `AGENTS.md` carry over, some by construction.
   from the game's origin is blocked, every request to an origin not in
   `origins` is aborted, new windows are closed as they open, downloads are
   refused and no browser permissions are granted. (Holdfast's selector click
-  could follow a link off its allowed origin.)
+  could follow a link off its allowed origin.) WebRTC is removed from every
+  frame: it connects outside the request filter, and the Chromium flag meant to
+  stop it blocks only UDP (see the audit below).
 - Input only to the game, and no pixels from other windows: the page is
   headless, in its own browser and profile, so there is nothing else to send
   input to or photograph.
@@ -246,6 +248,25 @@ Done 2026-11-27, steps 1 to 4 (the probe scene as the real game).
   It was seen in 2 of about 14 runs of the whole test suite, and in none of 450
   bare driver starts or 118 runs of the browser tests alone. The cause is not
   known. `start` tries once more, then reports it.
+
+## Audit
+
+2026-11-27, a review of the whole project.
+
+- The origin lock leaked through WebRTC. With
+  `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` set, a page on
+  127.0.0.1 pointed `RTCPeerConnection` at a TURN server on this PC's LAN
+  address, and that address received the TCP connection, while a `fetch` to the
+  same address was refused. The flag stops UDP only. The init script now deletes
+  `RTCPeerConnection`, `webkitRTCPeerConnection` and `RTCIceTransport`. A probe
+  then tried the page itself, an `about:blank` iframe, a `srcdoc` iframe (before
+  and after it loaded), a `data:` iframe running its own script, and a popup:
+  none found a constructor, and the listener got nothing. A live test checks
+  every frame.
+- `joshuaState()` is cut to size in the page, so a huge state is not carried
+  across the driver only to be clipped.
+- A key whose release failed in one segment change is tried again at the end of
+  the step, and time owed by a failed step is not charged to the next.
 
 Not measured yet: a game whose logic runs in a Web Worker; anything with sound;
 a game written by someone else.

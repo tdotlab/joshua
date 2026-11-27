@@ -44,8 +44,12 @@ page's and reports it instead of failing the step.
 
 The origin lock is `context.route` and `route_web_socket` for every URL:
 anything not in `origins` is aborted and counted. Service workers and downloads
-are refused, new pages closed as they open, dialogs dismissed. WebRTC and DNS
-prefetching are turned off by flag, since they would get around the route.
+are refused, new pages closed as they open, dialogs dismissed. DNS prefetching
+is turned off by flag, since it would get around the route. WebRTC would too:
+the flag `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` stops only
+UDP, and a page reached an arbitrary LAN address through a TURN server over TCP
+with it set. So the init script also deletes `RTCPeerConnection` and its
+relatives in every frame before the page's own scripts run.
 
 `proctree.py` lists processes on both systems. The Playwright driver is found
 as the new child of this process, and the watchdog sums the memory of its

@@ -35,7 +35,8 @@ MAX_MESSAGE = 300
 MAX_STATE = 4000
 
 # Chromium's flags. GPU drawing where there is a GPU, software WebGL where there is none, no
-# sound, and no address leaks around the request filter (WebRTC, DNS prefetching).
+# sound, and no address leaks around the request filter (DNS prefetching, WebRTC over UDP). The WebRTC
+# flag stops only UDP; TURN over TCP still got out, so PAGE_SCRIPT also removes WebRTC from the page.
 ARGS = ["--enable-gpu", "--enable-unsafe-swiftshader", "--mute-audio", "--dns-prefetch-disable",
         "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"]
 NO_SANDBOX = "JOSHUA_BROWSER_NO_SANDBOX"
@@ -66,6 +67,12 @@ KEYS = {
 PAGE_SCRIPT = r"""
 (() => {
   if (window.__joshuaLook) return;
+  // WebRTC connects to TURN servers over TCP outside the request filter, so a page could reach any
+  // address through it. Offline games have no use for it. This runs in every frame, child frames too.
+  for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCIceTransport']) {
+    try { delete window[name]; } catch (error) {}
+    if (name in window) Object.defineProperty(window, name, { value: undefined, configurable: false });
+  }
   let locked = null;
   const held = () => (locked && locked.isConnected ? locked : null);
   const announce = () => queueMicrotask(() => document.dispatchEvent(new Event('pointerlockchange')));
@@ -98,13 +105,15 @@ PAGE_SCRIPT = r"""
 })();
 """
 
-STATE_SCRIPT = """() => {
+# Cut short in the page, so a huge state is not carried across only to be clipped.
+STATE_SCRIPT = """(limit) => {
   if (typeof window.joshuaState !== 'function') return null;
   try {
     const value = window.joshuaState();
-    return JSON.stringify(value === undefined ? null : value);
+    const text = JSON.stringify(value === undefined ? null : value);
+    return typeof text === 'string' ? text.slice(0, limit) : String(text);
   } catch (error) {
-    return 'joshuaState() failed: ' + error;
+    return ('joshuaState() failed: ' + error).slice(0, limit);
   }
 }"""
 
@@ -163,16 +172,16 @@ class Player:
 
     def play(self, segments, settle_ms):
         """Returns the input time played. Every key and button is released, whatever happens."""
-        self.played = self.ran = 0
+        self.played = self.ran = self._owed = 0
         keys, buttons = [], []
         try:
             for segment in segments:
                 for key in [key for key in keys if key not in segment.keys]:
-                    keys.remove(key)
                     self.page.keyboard.up(KEYS[key])
+                    keys.remove(key)  # only once it is up: a failed release is tried again below
                 for button in [button for button in buttons if button not in segment.buttons]:
-                    buttons.remove(button)
                     self.page.mouse.up(button=button)
+                    buttons.remove(button)
                 if segment.mouse_to:
                     self.pointer = segment.mouse_to
                     self.page.mouse.move(*self.pointer)
@@ -521,7 +530,7 @@ class BrowserSession:
         if self._blocked:
             listed = ", ".join(f"{origin} ({count})" for origin, count in self._blocked.items())
             lines.append(f"Requests refused, to origins not in games.json: {listed}")
-        state = self._page.evaluate(STATE_SCRIPT) if not self._page.is_closed() else None
+        state = self._page.evaluate(STATE_SCRIPT, 2 * MAX_STATE) if not self._page.is_closed() else None
         if state is not None:
             lines.append(f"joshuaState(): {_clip(state, MAX_STATE)}")
         self._messages, self._dropped, self._dialogs, self._blocked = [], 0, [], {}
@@ -626,12 +635,10 @@ class BrowserSession:
         for pid in left:
             proctree.kill(pid)
 
-    def _kill(self, roots_too=False):
+    def _kill(self):
+        """Stop Chromium. Playwright's driver is left to notice and fail the call that is waiting on it."""
         for pid in reversed(self._processes()):
             proctree.kill(pid)
-        if roots_too:
-            for pid in self._roots:
-                proctree.kill(pid)
 
     def _watch(self):
         """Stop a browser that uses more memory than the game is allowed, or notice one that exited."""

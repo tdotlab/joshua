@@ -104,6 +104,22 @@ class PlayerTests(unittest.TestCase):
         released = [entry for entry in page.log if entry[0] in ("key.up", "mouse.up")]
         self.assertEqual(released, [("key.up", "ShiftLeft"), ("key.up", "KeyA"), ("mouse.up", "right")])
 
+    def test_a_key_whose_release_failed_is_released_again(self):
+        page = FakePage(fail_on=lambda log: log[-1] == ("key.up", "KeyD") and log.count(("key.up", "KeyD")) == 1)
+        with self.assertRaises(RuntimeError):
+            player(page).play(segments({"ms": 50, "keys": ["d"]}, {"ms": 50, "keys": ["w"]}), settle_ms=0)
+        self.assertEqual(page.log.count(("key.up", "KeyD")), 2)
+
+    def test_time_owed_by_a_failed_step_is_not_charged_to_the_next(self):
+        page = FakePage(fail_on=lambda log: log[-1][0] == "key.down")
+        made = player(page, frame_ms=50)
+        made._owed = 30  # as if a step had stopped part way through a frame
+        with self.assertRaises(RuntimeError):
+            made.play(segments({"ms": 50, "keys": ["d"]}), settle_ms=0)
+        page.fail_on = None
+        made.play(segments({"ms": 50}), settle_ms=0)
+        self.assertEqual(made.ran, 50)
+
     def test_longer_frames_jump_one_frame_at_a_time(self):
         page = FakePage()
         made = player(page, frame_ms=50)

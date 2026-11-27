@@ -19,6 +19,8 @@ HOLDS = ("pause_key", "freeze", "none")
 CAPTURES = ("after_pause", "before_pause")
 _PAUSE_ONLY = ("pause_key", "resume_key", "pause_ms", "capture", "check_pause")
 MIN_PAUSE_MS, MAX_PAUSE_MS = 20, 2000
+MAX_STARTUP_MS = 120000          # the server answers nothing else while a game starts
+MIN_WIDTH, MAX_WIDTH = 160, 7680  # max_width: screenshots of wider windows are scaled down to it
 
 
 @dataclass(frozen=True)
@@ -238,12 +240,17 @@ def load(path=None):
         if not all(isinstance(item, str) for item in args):
             raise JoshuaError(f"games.json: {name}.args must be strings")
         launch = _expect(entry, "launch", bool, True, name)
+        startup_ms = _expect(entry, "startup_ms", int, 3000, name)
+        if not 0 <= startup_ms <= MAX_STARTUP_MS:
+            raise JoshuaError(f"games.json: {name}.startup_ms must be from 0 to {MAX_STARTUP_MS}")
+        max_width = _expect(entry, "max_width", int, 1280, name)
+        if not MIN_WIDTH <= max_width <= MAX_WIDTH:
+            raise JoshuaError(f"games.json: {name}.max_width must be from {MIN_WIDTH} to {MAX_WIDTH}")
         games[name] = Game(
             name=name, exe=exe, args=tuple(args), cwd=resolve(cwd) if cwd else exe.parent,
             **holding, launch=launch, steam_appid=_steam_appid(entry, launch, name),
             window_title=_expect(entry, "window_title", str, None, name),
-            startup_ms=_expect(entry, "startup_ms", int, 3000, name),
-            max_width=_expect(entry, "max_width", int, 1280, name),
+            startup_ms=startup_ms, max_width=max_width,
             notes=_expect(entry, "notes", str, "", name),
         )
     return games

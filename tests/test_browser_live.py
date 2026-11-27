@@ -125,6 +125,25 @@ class BrowserLiveTests(unittest.TestCase):
         again = self.step(session, {"ms": 100})
         self.assertNotIn("deliberate", again.reported or "")  # reported once
 
+    def test_webrtc_is_gone_in_every_frame(self):
+        # WebRTC reaches TURN servers over TCP outside the request filter; see docs/BROWSER.md.
+        session, _ = self.start()
+        found = session._run(lambda: session._page.evaluate("""() => {
+            const names = ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCIceTransport'];
+            const blank = document.createElement('iframe');
+            document.body.appendChild(blank);
+            const seen = [];
+            for (const [where, w] of [['page', window], ['iframe', blank.contentWindow]])
+                for (const name of names) if (typeof w[name] === 'function') seen.push(where + ':' + name);
+            try { new RTCPeerConnection(); seen.push('constructed'); } catch (error) {}
+            return seen;
+        }"""), 30, "testing")
+        self.assertEqual(found, [])
+        frames = session._run(lambda: [frame.evaluate("typeof RTCPeerConnection")
+                                       for frame in session._page.frames], 30, "testing")
+        self.assertEqual(set(frames), {"undefined"})
+        self.assertGreaterEqual(len(frames), 2)
+
     def test_a_page_that_eats_memory_is_stopped(self):
         session, _ = self.start("?hog=20", memory_mb=512)
         result = self.step(session, {"ms": 5000})

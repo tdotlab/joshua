@@ -165,8 +165,8 @@ use. Set `JOSHUA_GAMES` to keep it elsewhere.
 | `launch` | `true` | `false`: only attach to a copy you started yourself. |
 | `steam_appid` | none | Start the game through Steam. See below. Cannot be combined with `args`, `cwd` or `"launch": false`. |
 | `window_title` | none | Text the window title must contain. |
-| `startup_ms` | `3000` | Time the game runs after its window appears. |
-| `max_width` | `1280` | Screenshots are scaled down to this width. |
+| `startup_ms` | `3000` | Time the game runs after its window appears, up to 120000. The server answers nothing else meanwhile. |
+| `max_width` | `1280` | Screenshots are scaled down to this width, from 160 to 7680. |
 | `notes` | `""` | Controls and goals, shown to the agent. |
 
 With `"hold": "pause_key"` only:
@@ -289,8 +289,9 @@ game in it can be held without help from the game. Tried with DOSBox 0.73 and
 
 With `autolock=true` in the DOSBox config (set in both tested copies), the first
 click in the window captures the mouse. After that `mouse_to` does not apply:
-move with `mouse_move`, which is not one to one with screenshot pixels, so look
-where the cursor landed and correct. Tell the agent this in `notes`.
+move with `mouse_move`, which is not one to one with screenshot pixels (the game's
+own scaling applies, and Windows pointer acceleration too unless the game reads
+raw input), so look where the cursor landed and correct. Tell the agent this in `notes`.
 
 **`freeze`. Untested on real games.** Suspend the whole process. In principle it
 works for any game, but suspending a process does not stop Windows' clocks: a

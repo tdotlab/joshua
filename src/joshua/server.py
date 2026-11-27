@@ -219,10 +219,16 @@ class Server:
                 self._release()
             elif self.owner is not None and self._clock() - self._used >= ABANDONED_SECONDS:
                 self._let_go()
-        except Exception:  # report, keep serving
+        except Exception:  # report, let go of the game as well as can be, keep serving
             traceback.print_exc(file=sys.stderr)
-            self.session = self.owner = None
-            self._release()
+            session, self.session, self.owner = self.session, None, None
+            try:
+                if session:
+                    session.close()  # a browser must not outlive its session
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+            finally:
+                self._release()
         finally:
             self._turn.release()
 
@@ -407,8 +413,13 @@ class Server:
         if "id" not in message:
             return None
         method = message["method"]
-        params = message.get("params") or {}
+        params = message.get("params")
         reply = {"jsonrpc": "2.0", "id": message["id"]}
+        if params is None:
+            params = {}
+        elif not isinstance(params, dict):
+            reply["error"] = {"code": -32602, "message": "params must be an object"}
+            return reply
         if method == "initialize":
             asked = params.get("protocolVersion")
             reply["result"] = {
@@ -430,6 +441,16 @@ class Server:
             reply["error"] = {"code": -32601, "message": f"method not found: {method}"}
         return reply
 
+    def respond(self, message, client=None):
+        """handle(), but a bug in it is answered as an internal error rather than ending the connection."""
+        try:
+            return self.handle(message, client)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+            if not isinstance(message, dict) or "id" not in message:
+                return None  # a notification gets no reply, not even an error
+            return {"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32603, "message": "internal error"}}
+
     def serve(self, source, sink):
         try:
             for line in source:
@@ -442,7 +463,7 @@ class Server:
                     response = {"jsonrpc": "2.0", "id": None,
                                 "error": {"code": -32700, "message": "parse error"}}
                 else:
-                    response = self.handle(message)
+                    response = self.respond(message)
                 if response is not None:
                     sink.write(json.dumps(response).encode("utf-8") + b"\n")
                     sink.flush()

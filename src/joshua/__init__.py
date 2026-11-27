@@ -1,4 +1,4 @@
-"""Let an agent play a Windows game one frozen step at a time."""
+"""Let an agent play a game one held step at a time: a Windows game, or a web page in headless Chromium."""
 
 __version__ = "0.1.0"
 

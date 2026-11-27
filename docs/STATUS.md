@@ -12,16 +12,18 @@ Playwright; the project's `.venv` has it.
 ## Verified
 
 - Browser games, 2026-11-27, Playwright 1.65.2:
-  - 23 safe tests (the step player against a stand-in page: key and button
-    changes, clock slices, look spread, release on failure, longer frames, page
-    exceptions; origin checks; config; the server's handling) and 7 live tests
-    against `tests/browserpage.html` in headless Chromium: the hold, exact game
-    time, longer frames, captured-mouse look and Esc, contained and reported
-    misbehaviour, the memory limit, and no processes left behind. All pass on
-    Windows with the `.venv` Python (144 tests in all, 6 opt-in skipped).
-  - Linux, python:3.12-slim in Docker: the safe tests pass (31, Windows ones
-    skipped), root is refused without `JOSHUA_BROWSER_NO_SANDBOX=1`, and with it
-    the 7 live tests pass. As an ordinary user the sandbox did not start under
+  - 25 safe tests (the step player against a stand-in page: key and button
+    changes, clock slices, look spread, release on failure and its retry,
+    longer frames, page exceptions; origin checks; config; the server's
+    handling) and 8 live tests against `tests/browserpage.html` in headless
+    Chromium: the hold, exact game time, longer frames, captured-mouse look and
+    Esc, contained and reported misbehaviour, WebRTC gone from every frame, the
+    memory limit, and no processes left behind. All pass on Windows with the
+    `.venv` Python (156 tests in all, 6 opt-in skipped).
+  - Linux, python:3.12-slim in Docker, before the audit: the safe tests passed
+    (31, Windows ones skipped), root is refused without
+    `JOSHUA_BROWSER_NO_SANDBOX=1`, and with it the 7 live tests then present
+    passed. As an ordinary user the sandbox did not start under
     Docker's default seccomp profile; the live tests skip with that reason.
   - The Three.js probe scene (terrain, trees, shadows, fog, three.js from
     jsdelivr as an allowed second origin) through the real server's tool calls:
@@ -29,15 +31,26 @@ Playwright; the project's `.venv` has it.
     0.2 s of real time, mouse look after a click captured the pointer, and
     `end_session` closed the browser. Killing a server outright took Chromium
     with it.
-- Safe tests (system Python, no Playwright): 144 run, 13 skipped (6 opt-in
-  window tests, 7 browser live tests). They cover step parsing, key
+- Safe tests (system Python, no Playwright): 156 run, 14 skipped (6 opt-in
+  window tests, 8 browser live tests), in about 3 s. They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
   calls replaced), pause-key trials against a pretend game and clock, PNG
-  encoding, comparison and corner masking, config, the MCP protocol
-  including the real server over stdio and HTTP, whose turn it is (takeover,
-  expiry, a second process), the network server's refusals, coordinate mapping,
-  covering-window wording, starting a program, and the Steam
-  start (the request and the waiting, with Windows calls replaced).
+  encoding, comparison and corner masking, config and its bounds, the MCP
+  protocol including the real server over stdio and HTTP and malformed requests
+  (`test_server.py`), whose turn it is (takeover, expiry, a second process), the
+  network server's refusals, coordinate mapping, covering-window wording,
+  starting a program, and the Steam start (the request and the waiting, with
+  Windows calls replaced).
+- Audit, 2026-11-27: a review of the whole project found and fixed a WebRTC
+  leak around the browser origin lock (see BROWSER.md); a request whose
+  `params` was not an object, which ended the stdio server or the HTTP
+  connection (now refused, and any unexpected failure answered as an internal
+  error); one failed key release leaving the other held keys down; a session
+  left open when the turn bookkeeping failed; `startup_ms` and `max_width`
+  without bounds (a huge `startup_ms` blocked the server); a failed launch
+  stopping the game by pid rather than by the handle held; and a test that
+  passed for the wrong reason after a 20 s wait. The live window tests were not
+  rerun after it.
 - Live tests (`JOSHUA_LIVE=1`), last passed 2026-11-27: the real server, over stdio and over HTTP on
   loopback, played `tests/pausebox.py` with `"hold": "pause_key"`. Window
   finding, focus, scan-code input, the pause key, screen capture and closing all

@@ -85,12 +85,18 @@ class Player:
         self._activity.mark()
 
     def _release(self, keys, buttons):
-        for button in list(buttons):
-            self._emit(mouse_event(api.MOUSE_BUTTON_FLAGS[button][1]))
-            self._buttons.remove(button)
-        for name in list(keys):
-            self._emit(key_event(name, False))
-            self._keys.remove(name)
+        """Let go of each one, even if letting go of another failed; then report the first failure."""
+        failed = None
+        events = [(button, self._buttons, mouse_event(api.MOUSE_BUTTON_FLAGS[button][1])) for button in buttons]
+        events += [(name, self._keys, key_event(name, False)) for name in keys]
+        for item, held, event in events:
+            try:
+                self._emit(event)
+            except Exception as error:
+                failed = failed or error
+            held.remove(item)  # tried once; repeating a refused release would not help
+        if failed:
+            raise failed
 
     def release_all(self):
         self._release(list(reversed(self._keys)), list(self._buttons))
