@@ -1,5 +1,9 @@
 # Joshua
 
+![Joshua — Let your agent command the sun. Artwork based on Joshua Commanding the Sun to Stand Still upon Gibeon by John Martin, 1816.](docs/joshua-banner.jpg)
+
+<sub>Artwork: John Martin, *Joshua Commanding the Sun to Stand Still upon Gibeon* (1816), National Gallery of Art.</sub>
+
 An MCP server that lets an agent play a Windows game turn by turn. The game is
 held still while the model thinks, runs only while the model's input plays, then
 is held again and returns a screenshot. Slow reasoning stops mattering; being bad
