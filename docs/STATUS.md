@@ -110,6 +110,9 @@ Network mode and the one-player lock are built; no other machine has connected.
 
 ## Next
 
+Build the browser-game backend designed in [BROWSER.md](BROWSER.md), if T
+approves it, in the order given there.
+
 Have an agent in a fresh session set up a game whose pause key nobody has told
 it, from a `"hold": "none"` entry, and fix whatever it trips on.
 

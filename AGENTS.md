@@ -15,6 +15,7 @@ Read [README.md](README.md), then [docs/STATUS.md](docs/STATUS.md).
 - `tests/`: `test_unit.py` and `test_network.py` are safe; `test_live.py` plays
   `pausebox.py` with real input (opt-in)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it works and why
+- [docs/BROWSER.md](docs/BROWSER.md): proposed browser-game backend (not built)
 
 ## Commands
 
