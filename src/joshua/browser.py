@@ -257,6 +257,10 @@ class _Overdue(Exception):
     pass
 
 
+class _DriverFailed(JoshuaError):
+    """Playwright's driver, a Node.js program, stopped while it was starting."""
+
+
 class _Worker:
     """One thread that owns every Playwright object."""
 
@@ -327,6 +331,13 @@ class BrowserSession:
     @classmethod
     def start(cls, game):
         _check_sandbox()
+        try:
+            return cls._start_once(game)
+        except _DriverFailed:  # seen now and then on Windows: one more try, from scratch
+            return cls._start_once(game)
+
+    @classmethod
+    def _start_once(cls, game):
         session = cls(game)
         try:
             frame, ran, reported = session._run(session._open, STARTUP_SECONDS, "starting")
@@ -407,7 +418,10 @@ class BrowserSession:
                               " (see README.md)") from None
         game = self.game
         before = set(proctree.children(os.getpid()))
-        self._pw = sync_playwright().start()
+        try:
+            self._pw = sync_playwright().start()
+        except Exception as error:
+            raise _DriverFailed(f"Playwright's driver did not start: {_clip(str(error), 300)}") from None
         self._roots = [pid for pid in proctree.children(os.getpid()) if pid not in before]
         self._seen.update({pid: proctree.started(pid) for pid in self._roots})
         threading.Thread(target=self._watch, name="joshua-browser-watch", daemon=True).start()

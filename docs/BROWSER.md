@@ -189,13 +189,13 @@ clock and need neither.
 - Dependency: `playwright`, needed only for browser games, plus
   `playwright install chromium` (on Debian, also `libatomic1`).
 
-## If the agent cannot load MCP
+## If an agent cannot load MCP
 
-Muse's harness may not load MCP servers. If it cannot, a small `joshua-call`
-command can talk to a server started with `--http --host 127.0.0.1`, print the
+For a harness that cannot load MCP servers, a small `joshua-call`
+command could talk to a server started with `--http --host 127.0.0.1`, print the
 text answer and save the screenshot to a file for the agent to open. It reuses
 the network transport, so it adds a client and no new server. Build it only if
-needed.
+needed; no agent has needed it so far (Muse can load Joshua).
 
 ## Order of work
 
@@ -208,12 +208,12 @@ needed.
    window games: the hold, an exact look, key release, a blocked origin, a
    blocked popup, a reported console error, and the memory limit killing a page
    that allocates without end.
-4. A real game: Muse's, if T passes it along, and the Three.js probe scene.
+4. A real game: another agent's, and the Three.js probe scene.
 5. `joshua-call`, if needed.
 
 ## Built
 
-Done 2026-11-27, steps 1 to 4 (Muse's game not yet; the probe scene yes).
+Done 2026-11-27, steps 1 to 4 (the probe scene as the real game).
 
 - On the Windows desktop (GTX 1070), `--enable-gpu` gave headless Chromium
   hardware WebGL through ANGLE on D3D11. The probe scene, driven through the
@@ -241,6 +241,11 @@ Done 2026-11-27, steps 1 to 4 (Muse's game not yet; the probe scene yes).
   300 px look arrives exactly; Esc releases the lock without reaching the page;
   a blocked fetch and WebSocket, a popup, an alert and an uncaught error are all
   contained and reported once. Peak memory was about 160 MB in 4 processes.
+- Playwright's driver (Node 26.13.1 with Playwright 1.65.2, Windows) sometimes
+  dies while starting, with a V8 fatal error, `Check failed: index < size()`.
+  It was seen in 2 of about 14 runs of the whole test suite, and in none of 450
+  bare driver starts or 118 runs of the browser tests alone. The cause is not
+  known. `start` tries once more, then reports it.
 
 Not measured yet: a game whose logic runs in a Web Worker; anything with sound;
-Muse's game; whether Muse's harness can load an MCP server at all.
+a game written by someone else.

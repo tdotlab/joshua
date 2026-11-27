@@ -12,13 +12,13 @@ Playwright; the project's `.venv` has it.
 ## Verified
 
 - Browser games, 2026-11-27, Playwright 1.65.2:
-  - 21 safe tests (the step player against a stand-in page: key and button
+  - 23 safe tests (the step player against a stand-in page: key and button
     changes, clock slices, look spread, release on failure, longer frames, page
     exceptions; origin checks; config; the server's handling) and 7 live tests
     against `tests/browserpage.html` in headless Chromium: the hold, exact game
     time, longer frames, captured-mouse look and Esc, contained and reported
     misbehaviour, the memory limit, and no processes left behind. All pass on
-    Windows with the `.venv` Python (142 tests in all, 6 opt-in skipped).
+    Windows with the `.venv` Python (144 tests in all, 6 opt-in skipped).
   - Linux, python:3.12-slim in Docker: the safe tests pass (31, Windows ones
     skipped), root is refused without `JOSHUA_BROWSER_NO_SANDBOX=1`, and with it
     the 7 live tests pass. As an ordinary user the sandbox did not start under
@@ -29,7 +29,7 @@ Playwright; the project's `.venv` has it.
     0.2 s of real time, mouse look after a click captured the pointer, and
     `end_session` closed the browser. Killing a server outright took Chromium
     with it.
-- Safe tests (system Python, no Playwright): 142 run, 13 skipped (6 opt-in
+- Safe tests (system Python, no Playwright): 144 run, 13 skipped (6 opt-in
   window tests, 7 browser live tests). They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
   calls replaced), pause-key trials against a pretend game and clock, PNG
@@ -38,7 +38,7 @@ Playwright; the project's `.venv` has it.
   expiry, a second process), the network server's refusals, coordinate mapping,
   covering-window wording, starting a program, and the Steam
   start (the request and the waiting, with Windows calls replaced).
-- Live tests (`JOSHUA_LIVE=1`), last passed 2026-11-26: the real server, over stdio and over HTTP on
+- Live tests (`JOSHUA_LIVE=1`), last passed 2026-11-27: the real server, over stdio and over HTTP on
   loopback, played `tests/pausebox.py` with `"hold": "pause_key"`. Window
   finding, focus, scan-code input, the pause key, screen capture and closing all
   worked. The game did not advance between steps, and a toggle started out of
@@ -129,6 +129,8 @@ Playwright; the project's `.venv` has it.
   looking and correcting.
 - Ctrl+Alt+F12 stops the current step only; the agent can send another.
 - Keyboard and mouse only: no gamepad, no audio.
+- Browser games: Playwright's driver now and then dies while starting (see
+  BROWSER.md); `start_game` tries once more.
 - Browser games: CSS animations run on real time during a step; audio clocks
   and Web Workers are not held; synthetic look events have `isTrusted` false;
   the memory watchdog can overshoot by a few hundred MB.
@@ -137,8 +139,8 @@ Playwright; the project's `.venv` has it.
 
 ## Next
 
-Browser games: try Muse's game if T passes it along; find out whether Muse's
-harness can load an MCP server, and build `joshua-call` only if it cannot. To
+Browser games: try a game someone else wrote. `joshua-call` is not needed so
+far, since Muse can load Joshua as it is. To
 play one from Claude Code here, register Joshua with `.venv\Scripts\python.exe`
 or install Playwright into the system Python.
 

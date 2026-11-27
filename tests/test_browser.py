@@ -201,6 +201,33 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.profile_dir(one).parent.name, "profiles")
 
 
+class StartTests(unittest.TestCase):
+    def start(self, failures):
+        """Start a session whose driver fails the first `failures` times, noting each session tried."""
+        self.tried = []
+
+        def run(session, work, seconds, doing):
+            self.tried.append(session)
+            if len(self.tried) <= failures:
+                raise browser._DriverFailed("Playwright's driver did not start: gone")
+            return None, 100, None
+
+        game = config.BrowserGame(name="web", url="http://127.0.0.1:8000/", origins=("http://127.0.0.1:8000",))
+        with mock.patch.object(browser.BrowserSession, "_run", run), \
+                mock.patch.object(browser, "_check_sandbox", lambda: None):
+            session, _ = browser.BrowserSession.start(game)
+        self.addCleanup(session.close)
+
+    def test_a_driver_that_fails_once_is_started_again(self):
+        self.start(failures=1)
+        self.assertEqual([session.alive() for session in self.tried], [False, True])
+
+    def test_a_driver_that_keeps_failing_is_reported(self):
+        with self.assertRaisesRegex(JoshuaError, "driver did not start"):
+            self.start(failures=2)
+        self.assertEqual([session.alive() for session in self.tried], [False, False])
+
+
 class FakeBrowserSession:
     started = []
 
