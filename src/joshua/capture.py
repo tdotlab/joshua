@@ -7,7 +7,6 @@ import zlib
 from dataclasses import dataclass
 
 from . import JoshuaError
-from . import win32 as api
 
 
 @dataclass(frozen=True)
@@ -120,6 +119,8 @@ def grab(left, top, width, height, max_width=1280, dpi=96):
 
     dpi is that of the display showing it, which sets how round its corners are.
     """
+    from . import win32 as api  # here, so that the rest of this module also works off Windows
+
     if width <= 0 or height <= 0:
         raise JoshuaError("the game window has no visible area")
     out_width, out_height = scaled_size(width, height, max_width)

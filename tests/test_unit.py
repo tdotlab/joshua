@@ -14,6 +14,9 @@ from pathlib import Path
 from unittest import mock
 
 import support
+
+if support.sys.platform != "win32":
+    raise unittest.SkipTest("the Windows backend; its tests need Windows")
 from joshua import JoshuaError, capture, config, hold, keyboard, process, timeline, trial, window
 from joshua import session as session_module
 from joshua.lock import PlayerLock

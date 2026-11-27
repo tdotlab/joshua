@@ -27,5 +27,12 @@
     "exe": "C:/Games/Chess/chess.exe",
     "hold": "none",
     "notes": "Click a piece, then the square to move it to."
+  },
+  "browser example": {
+    "kind": "browser",
+    "url": "http://127.0.0.1:8000/index.html",
+    "origins": ["https://cdn.jsdelivr.net"],
+    "viewport": [1280, 720],
+    "notes": "Served with: python -m http.server 8000 --bind 127.0.0.1, from the game's folder. Click to capture the mouse; WASD moves."
   }
 }

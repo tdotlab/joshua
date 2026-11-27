@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import JoshuaError
+from . import config
 
 DEFAULT_PORT = 8737
 ENDPOINT = "/mcp"
@@ -48,14 +49,15 @@ def tailnet_address():
 
 def token_path():
     chosen = os.environ.get("JOSHUA_TOKEN_FILE")
-    return Path(chosen) if chosen else Path(os.environ["LOCALAPPDATA"]) / "Joshua" / "token.txt"
+    return Path(chosen) if chosen else config.user_dir() / "token.txt"
 
 
 def load_token(path):
     """The secret a client must send, made on first use."""
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with path.open("x", encoding="ascii") as file:
+        # Readable by this user only where the mode applies (not on Windows, where the folder is private).
+        with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="ascii") as file:
             file.write(secrets.token_urlsafe(32) + "\n")
     except FileExistsError:
         pass

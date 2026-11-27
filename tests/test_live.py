@@ -19,6 +19,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import support
+
+if support.sys.platform != "win32":
+    raise unittest.SkipTest("the Windows backend; its tests need Windows")
 from joshua import process
 
 HERE = Path(__file__).resolve().parent

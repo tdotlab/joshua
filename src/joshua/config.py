@@ -1,15 +1,20 @@
 """games.json: the only programs an agent is allowed to touch."""
 
+import hashlib
 import json
 import os
+import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import JoshuaError
 from . import timeline
 
 PROJECT = Path(__file__).resolve().parents[2]
 
+KINDS = ("window", "browser")
 HOLDS = ("pause_key", "freeze", "none")
 CAPTURES = ("after_pause", "before_pause")
 _PAUSE_ONLY = ("pause_key", "resume_key", "pause_ms", "capture", "check_pause")
@@ -34,6 +39,63 @@ class Game:
     startup_ms: int = 3000
     max_width: int = 1280
     notes: str = ""
+    kind: str = "window"
+
+
+@dataclass(frozen=True)
+class BrowserGame:
+    """A game in a web page, played in headless Chromium and held by its clock."""
+
+    name: str
+    url: str
+    origins: tuple = ()          # the only origins the page may load from; the url's own is always one
+    viewport: tuple = (1280, 720)  # page size in CSS pixels, which is also the screenshot size
+    frame_ms: int = 16           # game time between frames
+    keep_profile: bool = False   # keep local storage (saves) between sessions
+    memory_mb: int = 2048        # the browser is stopped if it uses more
+    notes: str = ""
+    kind: str = "browser"
+    hold: str = "clock"          # always: nothing in the page runs between steps
+    launch: bool = True
+
+
+BROWSER_SETTINGS = ("kind", "url", "origins", "viewport", "frame_ms", "keep_profile", "memory_mb", "notes")
+MIN_FRAME_MS, MAX_FRAME_MS = 16, 100
+MIN_MEMORY_MB, MAX_MEMORY_MB = 256, 65536
+MIN_VIEWPORT, MAX_VIEWPORT = (160, 120), (3840, 2160)
+
+
+def user_dir():
+    """Where Joshua keeps its own files for this user: the network token and kept browser profiles."""
+    if sys.platform == "win32" and os.environ.get("LOCALAPPDATA"):
+        return Path(os.environ["LOCALAPPDATA"]) / "Joshua"
+    base = os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config"
+    return Path(base) / "joshua"
+
+
+def profile_dir(game):
+    """A kept browser profile, one per game name."""
+    slug = re.sub(r"[^a-z0-9]+", "-", game.name.lower()).strip("-")[:40] or "game"
+    digest = hashlib.sha256(game.name.encode("utf-8")).hexdigest()[:8]
+    return user_dir() / "profiles" / f"{slug}-{digest}"
+
+
+def origin_of(url, field):
+    """scheme://host[:port] of an http or https address, lowercased, without a default port."""
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        raise JoshuaError(f"{field} is not a valid address: {url!r}") from None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise JoshuaError(f"{field} must be an http or https address, not {url!r}. A game on disk must be"
+                          " served first, e.g. with python -m http.server, since a file: page has no origin to"
+                          " lock to.")
+    host = parts.hostname
+    if ":" in host:
+        host = f"[{host}]"
+    default = {"http": 80, "https": 443}[parts.scheme]
+    return f"{parts.scheme}://{host}" + ("" if port in (None, default) else f":{port}")
 
 
 def config_path():
@@ -99,6 +161,42 @@ def _steam_appid(entry, launch, name):
     return appid
 
 
+def _browser_game(entry, name):
+    unknown = set(entry) - set(BROWSER_SETTINGS)
+    if unknown:
+        window_only = sorted(unknown & set(Game.__dataclass_fields__))
+        if window_only:
+            raise JoshuaError(f"games.json: {name}.{window_only[0]} does not apply to a browser game: it is"
+                              " held by its clock, in a browser Joshua starts")
+        raise JoshuaError(f"games.json: {name} has unknown settings {sorted(unknown)}")
+    url = entry.get("url")
+    if not isinstance(url, str):
+        raise JoshuaError(f"games.json: {name} is a browser game, so it needs a \"url\"")
+    own = origin_of(url, f"games.json: {name}.url")
+    origins = _expect(entry, "origins", list, [], name)
+    if not all(isinstance(item, str) for item in origins):
+        raise JoshuaError(f"games.json: {name}.origins must be a list of addresses")
+    allowed = [own]
+    for item in origins:
+        origin = origin_of(item, f"games.json: {name}.origins")
+        if origin not in allowed:
+            allowed.append(origin)
+    viewport = _expect(entry, "viewport", list, [1280, 720], name)
+    if (len(viewport) != 2 or not all(isinstance(n, int) and not isinstance(n, bool) for n in viewport)
+            or not all(low <= n <= high for n, low, high in zip(viewport, MIN_VIEWPORT, MAX_VIEWPORT))):
+        raise JoshuaError(f"games.json: {name}.viewport must be [width, height], from {list(MIN_VIEWPORT)} to"
+                          f" {list(MAX_VIEWPORT)}")
+    frame_ms = _expect(entry, "frame_ms", int, 16, name)
+    if not MIN_FRAME_MS <= frame_ms <= MAX_FRAME_MS:
+        raise JoshuaError(f"games.json: {name}.frame_ms must be from {MIN_FRAME_MS} to {MAX_FRAME_MS}")
+    memory_mb = _expect(entry, "memory_mb", int, 2048, name)
+    if not MIN_MEMORY_MB <= memory_mb <= MAX_MEMORY_MB:
+        raise JoshuaError(f"games.json: {name}.memory_mb must be from {MIN_MEMORY_MB} to {MAX_MEMORY_MB}")
+    return BrowserGame(name=name, url=url, origins=tuple(allowed), viewport=tuple(viewport), frame_ms=frame_ms,
+                       keep_profile=_expect(entry, "keep_profile", bool, False, name), memory_mb=memory_mb,
+                       notes=_expect(entry, "notes", str, "", name))
+
+
 def load(path=None):
     """Read the allowlist. It is re-read on every use, so edits apply immediately."""
     path = Path(path) if path else config_path()
@@ -119,7 +217,16 @@ def load(path=None):
     games = {}
     known = set(Game.__dataclass_fields__) - {"name"}
     for name, entry in data.items():
-        if not isinstance(entry, dict) or not isinstance(entry.get("exe"), str):
+        if not isinstance(entry, dict):
+            raise JoshuaError(f"games.json: {name} must be an object")
+        kind = entry.get("kind", "window")
+        if kind not in KINDS:
+            raise JoshuaError(f"games.json: {name}.kind must be \"window\" (a program) or \"browser\" (a web"
+                              " page)")
+        if kind == "browser":
+            games[name] = _browser_game(entry, name)
+            continue
+        if not isinstance(entry.get("exe"), str):
             raise JoshuaError(f"games.json: {name} needs an \"exe\" path")
         unknown = set(entry) - known
         if unknown:

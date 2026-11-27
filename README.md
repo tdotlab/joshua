@@ -15,11 +15,16 @@ started through Steam, and walking and looting in Factorio. Freeze mode has
 never run against a real game. See [docs/STATUS.md](docs/STATUS.md) for what is
 and is not verified.
 
+It can also play [games in a web page](#browser-games), in a headless browser
+held still by the page's own clock, on Windows or Linux.
+
 ## Requirements
 
 - Windows 11, in a logged-in desktop session (the game takes screen and focus).
   Only `"hold": "freeze"` uses Windows 11 features; Windows 10 is untested.
-- Python 3.10 or newer (only 3.13 has been tried); no packages
+- Python 3.10 or newer (3.12 and 3.13 have been tried); no packages
+- Browser games only: Playwright and its Chromium, on Windows or Linux (no
+  desktop needed). See [Browser games](#browser-games).
 
 ## Setup
 
@@ -305,6 +310,79 @@ This project will not disguise any technique to get past antivirus software, and
 you should not turn protection off for it. Never use it on online games or games
 with anti-cheat.
 
+## Browser games
+
+A game that runs in a web page (a Three.js game, say) is played in headless
+Chromium, driven by Playwright. Playwright's clock stands in for the page's
+time: between steps no animation frame, timer or clock reading moves, and a
+step advances exactly the game time it asks for, however slowly the machine
+draws. There is no screen, keyboard or focus involved, so it also works on a
+Linux machine or VM with no display or GPU, and does not take the one-player
+lock. Design and measurements: [docs/BROWSER.md](docs/BROWSER.md).
+
+Install, into the Python that runs Joshua:
+
+```powershell
+python -m pip install playwright
+python -m playwright install chromium --only-shell
+```
+
+Chromium goes to `%LOCALAPPDATA%\ms-playwright` (on Linux,
+`~/.cache/ms-playwright`). On Debian or Ubuntu add `--with-deps` to the second
+command, or install `libatomic1`. If Joshua is registered with one Python and
+Playwright installed in another (a virtual environment, say), point the MCP
+registration at that environment's `python`.
+
+Chromium's sandbox stays on. As root, which is usual in containers, it cannot
+work, so Joshua refuses to start a browser game there unless
+`JOSHUA_BROWSER_NO_SANDBOX=1` is set. Set it only on a machine that is itself a
+throwaway sandbox. The same variable helps where Docker's default seccomp
+profile stops an ordinary user's sandbox.
+
+List the game by its address. A game on disk is served first, since `file:`
+pages have no origin to lock to:
+
+```powershell
+python -m http.server 8000 --bind 127.0.0.1
+```
+
+```json
+"survival": {
+  "kind": "browser",
+  "url": "http://127.0.0.1:8000/index.html",
+  "origins": ["https://cdn.jsdelivr.net"],
+  "viewport": [1280, 720],
+  "notes": "WASD moves. Click to capture the mouse, then mouse_move looks around."
+}
+```
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `kind` | `"window"` | `"browser"` for a web page. Window settings (`exe`, `hold`, `pause_key`...) are refused on it. |
+| `url` | required | Where the game is, `http` or `https`. |
+| `origins` | the origin of `url` | The only origins the page may load anything from. A game that loads a library from a CDN needs that origin listed. Everything else is refused and reported. |
+| `viewport` | `[1280, 720]` | Page size in CSS pixels, which is also the screenshot size. Smaller draws faster. |
+| `frame_ms` | `16` | Game time between frames, 16 to 100. Larger draws fewer frames per game second, which is faster, but a timer due more often fires only once per frame. |
+| `keep_profile` | `false` | Keep the browser profile, and so saves in local storage, between sessions. Kept in `%LOCALAPPDATA%\Joshua\profiles` (on Linux, `~/.config/joshua/profiles`). |
+| `memory_mb` | `2048` | The browser is stopped if its processes use more, 256 to 65536. |
+| `notes` | `""` | Controls and goals, shown to the agent. |
+
+What to expect:
+
+- `mouse_to` is in page pixels. When the page asks for pointer lock it is told
+  it has it, and `mouse_move` arrives as `mousemove` events with exact
+  `movementX`/`movementY`. Esc lets go of it, as in a real browser.
+- Each step reports what the page said since the last one: console errors,
+  uncaught exceptions, dialogs (dismissed), refused requests, and the return
+  value of `window.joshuaState()` if the page defines it. A game author can
+  expose position, health or the level there. All of it is written by the page.
+- Popups are closed, downloads and service workers refused, sound muted.
+- `end_session` always closes the browser. A step that takes more than 120 s of
+  real time (or 15 s per second of game time, if more), or a browser over
+  `memory_mb`, ends the session with the reason.
+- Not held: CSS animations run on real time during a step (they are stopped
+  between steps), and so would audio clocks and Web Workers.
+
 ## Tools
 
 | Tool | What it does |
@@ -312,8 +390,8 @@ with anti-cheat.
 | `list_games` | The allowed games and their notes. |
 | `start_game` | Start or attach, hold still, return a screenshot. |
 | `step` | Let it run, play a list of timed segments, hold still, return a screenshot. |
-| `repause` | Press the pause key once more, when a toggle is out of step. |
-| `try_pause` | For a game listed with `"hold": "none"`: [find its pause settings](#adding-a-game). |
+| `repause` | Press the pause key once more, when a toggle is out of step. Window games only. |
+| `try_pause` | For a window game listed with `"hold": "none"`: [find its pause settings](#adding-a-game). |
 | `look` | The latest screenshot again. |
 | `end_session` | Let go (a frozen game is thawed, a paused one stays paused); optionally close a game this session started. |
 
@@ -355,6 +433,16 @@ group is opt-in: with `JOSHUA_LIVE=1`, the real server, over stdio and over HTTP
 on loopback, plays `tests/pausebox.py`, a small Tk window that pauses with P,
 using real input and screenshots. It takes the screen and keyboard for about a
 minute, so leave the computer alone. Nothing is suspended.
+
+The browser tests run whenever Playwright and its Chromium are installed for the
+Python running them, and skip with the reason otherwise. They are headless and
+take nothing from the desktop; `tests/browserpage.html` stands in for a game:
+
+```powershell
+python -m unittest discover -s tests -p "test_browser*.py" -v
+```
+
+On Linux only the platform-neutral tests run; the Windows ones skip.
 
 Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

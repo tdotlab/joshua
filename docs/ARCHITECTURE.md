@@ -2,12 +2,59 @@
 
 ```
 agent --MCP over stdio-----------------> server.py --> session.py --> hold / process / window / keyboard / capture
-agent --MCP over HTTP--> network.py ----^    |                                     |
-                                         lock.py                                 game
+agent --MCP over HTTP--> network.py ----^    |    \                                |
+                                         lock.py   browser.py --> Playwright --> headless Chromium (game page)
 ```
 
-The server speaks JSON-RPC itself and has no dependencies. It holds one game
-session at a time. `config.py` is the allowlist.
+The server speaks JSON-RPC itself. It holds one game session at a time.
+`config.py` is the allowlist, and an entry's `kind` picks the session class:
+`session.Session` for a window game, `browser.BrowserSession` for a web page.
+Both return a `result.Result`. Window games need no packages; browser games need
+Playwright, imported only when one starts. The Windows modules are imported only
+for window games, so the server and the browser backend also run on Linux.
+
+## Browser games (`browser.py`)
+
+Design and measurements are in [BROWSER.md](BROWSER.md); this is how the code
+does it.
+
+Playwright's sync API belongs to the thread that created it, and the server
+answers calls on several threads, so a `_Worker` thread owns every Playwright
+object and each call is handed to it with a real-time limit. If the limit
+passes, the browser's processes are killed, which makes the stuck call fail.
+
+`start` launches Chromium with its sandbox on, installs Playwright's clock
+paused, adds `PAGE_SCRIPT` and loads the page. The script pretends pointer lock
+(headless Chromium's real lock reverses every move), turns look into
+`pointermove` and `mousemove` events, and counts animation frames. The page
+then gets game time in 100 ms pieces until it has drawn three frames, at most
+5 s of game time; time stands still while its files are still arriving.
+
+`Player` plays a step: per segment it releases what is no longer held, presses
+what is new, moves to `mouse_to`, then advances the clock in slices of at most
+50 ms, spreading `mouse_move` over them. With `frame_ms` 16 it uses `run_for`;
+above that `fast_forward`, one frame at a time, catching up the remainder at the
+end. Keys and buttons are released in a `finally`. CSS animations are not on
+the clock, so CDP's `Animation.setPlaybackRate` sets them to 1 during a step and
+0 between steps.
+
+An exception thrown by the page's own timer or frame callback comes out of the
+clock call, after the whole interval has run. `_thrown` recognises it as the
+page's and reports it instead of failing the step.
+
+The origin lock is `context.route` and `route_web_socket` for every URL:
+anything not in `origins` is aborted and counted. Service workers and downloads
+are refused, new pages closed as they open, dialogs dismissed. WebRTC and DNS
+prefetching are turned off by flag, since they would get around the route.
+
+`proctree.py` lists processes on both systems. The Playwright driver is found
+as the new child of this process, and the watchdog sums the memory of its
+descendants every 0.1 s, killing them past `memory_mb`. Chromium can allocate a
+few hundred MB within one interval, so it is a backstop, not an exact cap. On
+Windows a child whose parent has died is no longer reachable from the tree, so
+every process seen is remembered with its start time, and anything still running
+after `close` is killed. If the server itself is killed, the driver takes
+Chromium with it.
 
 ## Starting through Steam
 

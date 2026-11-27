@@ -1,3 +1,4 @@
 build/
 games.json
 __pycache__/
+.venv/

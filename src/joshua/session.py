@@ -1,11 +1,11 @@
 """One game being played: held still between steps, running only while input plays."""
 
 import time
-from dataclasses import dataclass
 
 from . import JoshuaError
 from . import capture, hold, keyboard, process, timeline, trial, window
 from . import win32 as api
+from .result import Result
 
 IDLE_BEFORE_TAKING_FOCUS_MS = 2000
 IDLE_WAIT_SECONDS = 15
@@ -16,18 +16,6 @@ STEAM_POLL_SECONDS = 1
 
 STILL_RUNNING = ("the picture kept changing after the game was paused, so it may still be running (or its"
                  " pause screen is animated). If it is running, call repause.")
-
-
-@dataclass
-class Result:
-    frame: capture.Frame | None
-    played_ms: int
-    ran_ms: int
-    stopped: str | None = None   # why input ended early
-    no_frame: str | None = None  # why there is no new screenshot
-    state: str = "frozen"        # frozen, paused, running, unheld or exited
-    warning: str | None = None
-    window_age: int | None = None  # for an unheld game started here: seconds since its window appeared
 
 
 class Session:

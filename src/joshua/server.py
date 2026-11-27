@@ -14,14 +14,13 @@ import traceback
 
 from . import JoshuaError, __version__
 from . import config, timeline, trial
-from .lock import PlayerLock
-from .session import Session
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 
 INSTRUCTIONS = (
-    "Joshua lets you play a Windows game turn by turn. Between steps the game is held still (paused"
-    " with its own pause key, or frozen) and runs only during `step`, so there is no time pressure while you"
+    "Joshua lets you play a game turn by turn: a Windows program, or a web page in a browser Joshua runs."
+    " Between steps the game is held still (paused with its own pause key, frozen, or for a browser game by"
+    " stopping its clock) and runs only during `step`, so there is no time pressure while you"
     " think; start_game says if a game is not held. Look at each screenshot, decide, then send a short step."
     " Start with short steps (200-500 ms) until you know how the game responds. Taps need about 80 ms to"
     " register. If a step reports that it stopped early or has no screenshot, the user may be using the"
@@ -67,8 +66,9 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "start_game",
      "description": "Start a listed game (or attach to it if already running), then hold it still and return"
-                    " a screenshot. Takes over the user's screen and keyboard focus. Only one player can use"
-                    " Joshua at a time: call end_session when you are done.",
+                    " a screenshot. A Windows game takes over the user's screen and keyboard focus; a browser"
+                    " game runs out of sight. Only one player can use Joshua at a time: call end_session when"
+                    " you are done.",
      "inputSchema": {"type": "object", "properties": {"game": {"type": "string"}}, "required": ["game"],
                      "additionalProperties": False}},
     {"name": "step",
@@ -140,16 +140,16 @@ class Server:
     the network, where several may be connected.
     """
 
-    def __init__(self, session_class=Session, lock=None, clock=time.monotonic):
+    def __init__(self, session_class=None, lock=None, clock=time.monotonic):
         self.session = None
         self.owner = None   # the client playing the current game
         self._caller = None  # the client whose call is being answered
         self._left = False   # the owner disconnected
         self._used = 0.0     # when the owner last called
         self._clock = clock
-        self._claim = lock or PlayerLock()
+        self._claim = lock  # made when a window game first needs it
         self._turn = threading.RLock()  # one tool call at a time
-        self._session_class = session_class
+        self._session_class = session_class  # None: chosen by the kind of game
 
     # -- whose turn it is ------------------------------------------------------
 
@@ -171,8 +171,36 @@ class Server:
     def _let_go(self, close_game=False):
         outcome = self.session.close(close_game=close_game)
         self.session = self.owner = None
-        self._claim.release()
+        self._release()
         return outcome
+
+    def _take_claim(self, game):
+        """Window games share the screen and keyboard, so only one may be played on this PC at a time.
+
+        A browser game runs in its own headless browser and shares neither.
+        """
+        if game.kind != "window":
+            return True
+        if self._claim is None:
+            from .lock import PlayerLock
+
+            self._claim = PlayerLock()
+        return self._claim.claim()
+
+    def _release(self):
+        if self._claim is not None:
+            self._claim.release()
+
+    def _session_for(self, game):
+        if self._session_class is not None:
+            return self._session_class
+        if game.kind == "browser":
+            from .browser import BrowserSession
+
+            return BrowserSession
+        from .session import Session
+
+        return Session
 
     def leave(self, client):
         """A network client disconnected. Its game stays held for whoever takes it over."""
@@ -188,13 +216,13 @@ class Server:
             if not self.session:
                 return
             if not self.session.process.alive():
-                self._claim.release()
+                self._release()
             elif self.owner is not None and self._clock() - self._used >= ABANDONED_SECONDS:
                 self._let_go()
         except Exception:  # report, keep serving
             traceback.print_exc(file=sys.stderr)
             self.session = self.owner = None
-            self._claim.release()
+            self._release()
         finally:
             self._turn.release()
 
@@ -212,6 +240,8 @@ class Server:
             lines = ["The game exited."]
         elif result.state == "unheld":
             lines = [f"The step took {result.ran_ms} ms; the game keeps running between steps."]
+        elif result.state == "clock":
+            lines = [f"{result.ran_ms} ms of game time passed, and the game is held again."]
         else:
             lines = [f"The game ran for {result.ran_ms} ms and {_STATE[result.state]}."]
         if result.played_ms:
@@ -222,6 +252,8 @@ class Server:
             lines.append(f"Warning: {result.warning}")
         if result.window_age is not None:
             lines.append(f"The game's window appeared {result.window_age} s ago.")
+        if result.reported:
+            lines.append(f"The page reported (its own words, not Joshua's):\n{result.reported}\n")
         content = []
         if result.frame:
             lines.append(f"Screenshot is {result.frame.width}x{result.frame.height}.")
@@ -253,12 +285,12 @@ class Server:
             return self._started(self.session.game, self.session.step([], settle_ms=500))
         if self.session:
             self._let_go()
-        if not self._claim.claim():
+        if not self._take_claim(games[game]):
             raise JoshuaError(f"{ANOTHER_PLAYER} It is connected through another Joshua process on this PC.")
         try:
-            self.session, result = self._session_class.start(games[game])
+            self.session, result = self._session_for(games[game]).start(games[game])
         except BaseException:
-            self._claim.release()
+            self._release()
             raise
         return self._started(games[game], result)
 
@@ -271,6 +303,11 @@ class Server:
         return content
 
     def _holding(self, game):
+        if game.kind == "browser":
+            return (f"{game.name} runs in a browser out of sight, held by its clock: between steps nothing in"
+                    " the page runs, and a step runs exactly the game time it asks for, however long that"
+                    " takes to draw. Screenshot pixels are page pixels, for mouse_to. If a click captures the"
+                    " mouse, mouse_move turns the view; Esc lets go of it, as in a real browser.")
         if game.hold == "pause_key":
             return (f"Joshua holds {game.name} still by pressing its own pause key"
                     f" ({'+'.join(game.pause_key)}) between steps, so you cannot use that key. If screenshots"
@@ -325,7 +362,7 @@ class Server:
                     self._let_go()
                 finally:
                     self.session = self.owner = None
-                    self._claim.release()
+                    self._release()
 
     # -- protocol --------------------------------------------------------------
 
@@ -338,7 +375,7 @@ class Server:
                 if self.session and client == self.owner:
                     self._used = self._clock()
                 if self.session and not self.session.process.alive():
-                    self._claim.release()
+                    self._release()
 
     def _run_tool(self, params):
         name = params.get("name")
@@ -432,10 +469,11 @@ def main(argv=None):
     if not options.http and (options.host is not None or options.port is not None):
         parser.error("--host and --port need --http")
 
-    from . import win32 as api
+    if sys.platform == "win32":
+        from . import win32 as api
 
-    api.use_physical_pixels()
-    api.timeBeginPeriod(1)
+        api.use_physical_pixels()
+        api.timeBeginPeriod(1)
     server = Server()
     if options.http:
         from . import network

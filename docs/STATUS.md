@@ -4,10 +4,33 @@ As of 2026-11-27. Experimental. Registered with Claude Code (user scope) as
 `joshua`, with a local `games.json` listing Daggerfall and Redguard. The server
 connects and lists them; no agent has played through that registration yet.
 Network mode and the one-player lock are built; no other machine has connected.
+The browser-game backend ([BROWSER.md](BROWSER.md)) is built and tested on
+Windows and in a Linux container; no agent has played a browser game through an
+MCP client yet. The registered command uses the system Python, which has no
+Playwright; the project's `.venv` has it.
 
 ## Verified
 
-- Safe tests: 108 pass, 6 opt-in tests skipped. They cover step parsing, key
+- Browser games, 2026-11-27, Playwright 1.65.2:
+  - 21 safe tests (the step player against a stand-in page: key and button
+    changes, clock slices, look spread, release on failure, longer frames, page
+    exceptions; origin checks; config; the server's handling) and 7 live tests
+    against `tests/browserpage.html` in headless Chromium: the hold, exact game
+    time, longer frames, captured-mouse look and Esc, contained and reported
+    misbehaviour, the memory limit, and no processes left behind. All pass on
+    Windows with the `.venv` Python (142 tests in all, 6 opt-in skipped).
+  - Linux, python:3.12-slim in Docker: the safe tests pass (31, Windows ones
+    skipped), root is refused without `JOSHUA_BROWSER_NO_SANDBOX=1`, and with it
+    the 7 live tests pass. As an ordinary user the sandbox did not start under
+    Docker's default seccomp profile; the live tests skip with that reason.
+  - The Three.js probe scene (terrain, trees, shadows, fog, three.js from
+    jsdelivr as an allowed second origin) through the real server's tool calls:
+    hardware WebGL on the GTX 1070, start in 4.2 s, a second of walking in
+    0.2 s of real time, mouse look after a click captured the pointer, and
+    `end_session` closed the browser. Killing a server outright took Chromium
+    with it.
+- Safe tests (system Python, no Playwright): 142 run, 13 skipped (6 opt-in
+  window tests, 7 browser live tests). They cover step parsing, key
   release logic, the three hold strategies and the order of a whole step (Windows
   calls replaced), pause-key trials against a pretend game and clock, PNG
   encoding, comparison and corner masking, config, the MCP protocol
@@ -91,7 +114,8 @@ Network mode and the one-player lock are built; no other machine has connected.
   key is therefore still unknown.
 - `"hold": "freeze"`: never run through the full session path or on a real game,
   and whether antivirus software reacts to suspension is unknown.
-- Camera look with `mouse_move` in a 3D game.
+- Camera look with `mouse_move` in a 3D window game (it works in the browser
+  scene).
 
 ## Known gaps
 
@@ -105,13 +129,18 @@ Network mode and the one-player lock are built; no other machine has connected.
   looking and correcting.
 - Ctrl+Alt+F12 stops the current step only; the agent can send another.
 - Keyboard and mouse only: no gamepad, no audio.
+- Browser games: CSS animations run on real time during a step; audio clocks
+  and Web Workers are not held; synthetic look events have `isTrusted` false;
+  the memory watchdog can overshoot by a few hundred MB.
 - In pause mode the game runs briefly outside the agent's input (about
   `pause_ms` before and after).
 
 ## Next
 
-Build the browser-game backend designed in [BROWSER.md](BROWSER.md), if T
-approves it, in the order given there.
+Browser games: try Muse's game if T passes it along; find out whether Muse's
+harness can load an MCP server, and build `joshua-call` only if it cannot. To
+play one from Claude Code here, register Joshua with `.venv\Scripts\python.exe`
+or install Playwright into the system Python.
 
 Have an agent in a fresh session set up a game whose pause key nobody has told
 it, from a `"hold": "none"` entry, and fix whatever it trips on.

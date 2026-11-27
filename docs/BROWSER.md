@@ -1,6 +1,9 @@
-# Browser games (design, not built)
+# Browser games
 
-Status: proposed 2026-11-27. Nothing here exists in the code yet.
+Status: designed and built 2026-11-27 (`src/joshua/browser.py`; set-up in
+README.md, code walk-through in ARCHITECTURE.md). Steps 1 to 4 of the order of
+work below are done; `joshua-call` is not built. What building it found is under
+[Built](#built).
 
 A second kind of game for Joshua: one that runs in a web page. It is played
 through headless Chromium driven by Playwright, so it works on Linux and on
@@ -154,8 +157,8 @@ The properties in `AGENTS.md` carry over, some by construction.
   would have been stopped.
 - Nothing left behind: Chromium is closed on `end_session`, when the client
   hangs up and when the server exits. Nothing is suspended, so there are no
-  stopped processes to orphan (Holdfast left 12 behind). Whether Chromium also
-  exits when the server is killed outright needs checking.
+  stopped processes to orphan (Holdfast left 12 behind). Killed outright, the
+  server takes Chromium with it on Windows (checked; see below).
 - Chromium's sandbox stays on. Running as root, as in most containers, needs
   it off; Joshua refuses unless the user's environment says to allow that.
 - One player: the per-PC lock exists because window games share the screen and
@@ -208,6 +211,36 @@ needed.
 4. A real game: Muse's, if T passes it along, and the Three.js probe scene.
 5. `joshua-call`, if needed.
 
-Not measured yet: the same backend on the Desktop with hardware WebGL, which
-should be much faster than software rendering; a game whose logic runs in a
-Web Worker; anything with sound.
+## Built
+
+Done 2026-11-27, steps 1 to 4 (Muse's game not yet; the probe scene yes).
+
+- On the Windows desktop (GTX 1070), `--enable-gpu` gave headless Chromium
+  hardware WebGL through ANGLE on D3D11. The probe scene, driven through the
+  real server's tool calls, started in 4.2 s; 1 s of game time holding W moved
+  the player 4.96 units at 5 units/s and took 0.20 s of real time; a click,
+  a 400 px look and 1.5 s of W and Shift took 0.35 s. Compare 2 to 5 s per game
+  second in software above. Without a GPU, `--enable-unsafe-swiftshader` keeps
+  software WebGL working.
+- The clock rethrows exceptions from the page's own timers and frame callbacks
+  out of `run_for`, after finishing the interval. Left alone, one bad callback
+  aborted `start_game`. They are now reported as the page's and play goes on.
+- The memory watchdog overshoots: a page allocating 20 MB a frame reached about
+  800 MB against a 512 MB limit with slower sampling. At 0.1 s it is a backstop
+  that stops runaways, not an exact cap.
+- Killing the server outright (Windows) took Chromium down within 3 s. On
+  Windows, browser processes whose parent died drop out of the process tree, so
+  `close` also kills anything it saw that is still running.
+- In Docker (python:3.12-slim), Chromium's sandbox fails for an ordinary user
+  under the default seccomp profile, which blocks user namespaces. Joshua says
+  so; as root it refuses unless `JOSHUA_BROWSER_NO_SANDBOX=1`. With the opt-out
+  the live tests pass there. A sandbox-on launch on Linux has not been seen
+  working, since that needs a relaxed seccomp profile, which was not tried.
+- On the test page: no frame or timer moves in a second of real time between
+  steps; 1000 ms of D gives 100 px, 10 timer ticks and about 62 frames; a
+  300 px look arrives exactly; Esc releases the lock without reaching the page;
+  a blocked fetch and WebSocket, a popup, an alert and an uncaught error are all
+  contained and reported once. Peak memory was about 160 MB in 4 processes.
+
+Not measured yet: a game whose logic runs in a Web Worker; anything with sound;
+Muse's game; whether Muse's harness can load an MCP server at all.

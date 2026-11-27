@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Joshua browser test page</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #102030; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script>
+// A stand-in game for tests/test_browser_live.py. Holding D moves right at 100 px a second of game
+// time, A moves left. A left click captures the mouse; while captured, mouse movement turns yaw.
+// Query parameters make it misbehave on purpose: blocked=<url> fetches and opens a socket to it,
+// popup=1 opens a window, error=1 throws, alert=1 opens a dialog, hog=<MB> allocates that much a frame.
+const params = new URLSearchParams(location.search);
+const s = { frames: 0, x: 0, yaw: 0, pitch: 0, keys: {}, downs: [], ups: [], clicks: 0, locked: false,
+            timers: 0, started: performance.now(), dateStarted: Date.now(), hogged: 0 };
+window.s = s;
+window.joshuaState = () => ({ x: Math.round(s.x), yaw: s.yaw, locked: s.locked,
+                              held: Object.keys(s.keys).filter((code) => s.keys[code]) });
+
+addEventListener('keydown', (event) => { if (!event.repeat) { s.keys[event.code] = true; s.downs.push(event.code); } });
+addEventListener('keyup', (event) => { s.keys[event.code] = false; s.ups.push(event.code); });
+const view = document.getElementById('view');
+view.addEventListener('mousedown', (event) => { s.clicks += 1; if (event.button === 0) view.requestPointerLock(); });
+document.addEventListener('pointerlockchange', () => { s.locked = document.pointerLockElement === view; });
+document.addEventListener('mousemove', (event) => {
+  if (s.locked) { s.yaw += event.movementX; s.pitch += event.movementY; }
+});
+setInterval(() => { s.timers += 1; }, 100);
+
+const hog = Number(params.get('hog') || 0), kept = [];
+let last = null;
+function frame(at) {
+  if (last !== null) {
+    const seconds = (at - last) / 1000;
+    if (s.keys.KeyD) s.x += 100 * seconds;
+    if (s.keys.KeyA) s.x -= 100 * seconds;
+  }
+  last = at;
+  s.frames += 1;
+  if (hog) {
+    const block = new Uint8Array(hog * 1024 * 1024);
+    block.fill(s.frames & 255);
+    kept.push(block);
+    s.hogged += hog;
+  }
+  view.width = innerWidth; view.height = innerHeight;
+  const draw = view.getContext('2d');
+  draw.fillStyle = '#102030'; draw.fillRect(0, 0, view.width, view.height);
+  draw.fillStyle = s.locked ? '#40e070' : '#f0c020';
+  draw.fillRect(100 + s.x, 100, 40, 40);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+if (params.get('blocked')) {
+  fetch(params.get('blocked')).catch(() => {});
+  try { new WebSocket(params.get('blocked').replace(/^http/, 'ws')); } catch (error) {}
+}
+if (params.get('popup')) window.open(location.href.split('?')[0], '_blank');
+if (params.get('alert')) alert('hello from the page');
+if (params.get('error')) setTimeout(() => { throw new Error('deliberate test error'); }, 0);
+</script>
+</body>
+</html>

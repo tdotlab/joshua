@@ -49,6 +49,8 @@ VK_F12 = 0x7B
 SRCCOPY = 0x00CC0020
 CAPTUREBLT = 0x40000000
 HALFTONE = 4
+TH32CS_SNAPPROCESS = 0x00000002
+INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
 
 class MOUSEINPUT(ctypes.Structure):
@@ -81,6 +83,21 @@ class BITMAPINFOHEADER(ctypes.Structure):
                 ("biClrImportant", w.DWORD)]
 
 
+class PROCESSENTRY32W(ctypes.Structure):
+    _fields_ = [("dwSize", w.DWORD), ("cntUsage", w.DWORD), ("th32ProcessID", w.DWORD),
+                ("th32DefaultHeapID", ULONG_PTR), ("th32ModuleID", w.DWORD), ("cntThreads", w.DWORD),
+                ("th32ParentProcessID", w.DWORD), ("pcPriClassBase", w.LONG), ("dwFlags", w.DWORD),
+                ("szExeFile", w.WCHAR * 260)]
+
+
+class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
+    _fields_ = [("cb", w.DWORD), ("PageFaultCount", w.DWORD), ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t), ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t), ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t), ("PrivateUsage", ctypes.c_size_t)]
+
+
 EnumWindowsProc = ctypes.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
 
 
@@ -105,6 +122,13 @@ EnumProcesses = _declare(kernel32, "K32EnumProcesses", w.BOOL, _P(w.DWORD), w.DW
 QueryPerformanceCounter = _declare(kernel32, "QueryPerformanceCounter", w.BOOL, _P(ctypes.c_int64))
 GetTickCount = _declare(kernel32, "GetTickCount", w.DWORD)
 GetCurrentThreadId = _declare(kernel32, "GetCurrentThreadId", w.DWORD)
+CreateToolhelp32Snapshot = _declare(kernel32, "CreateToolhelp32Snapshot", w.HANDLE, w.DWORD, w.DWORD)
+Process32FirstW = _declare(kernel32, "Process32FirstW", w.BOOL, w.HANDLE, _P(PROCESSENTRY32W))
+Process32NextW = _declare(kernel32, "Process32NextW", w.BOOL, w.HANDLE, _P(PROCESSENTRY32W))
+GetProcessTimes = _declare(kernel32, "GetProcessTimes", w.BOOL, w.HANDLE, _P(w.FILETIME), _P(w.FILETIME),
+                           _P(w.FILETIME), _P(w.FILETIME))
+GetProcessMemoryInfo = _declare(kernel32, "K32GetProcessMemoryInfo", w.BOOL, w.HANDLE,
+                                _P(PROCESS_MEMORY_COUNTERS_EX), w.DWORD)
 
 NtCreateProcessStateChange = _declare(ntdll, "NtCreateProcessStateChange", w.LONG, _P(w.HANDLE),
                                       w.DWORD, ctypes.c_void_p, w.HANDLE, w.ULONG)

@@ -16,6 +16,9 @@ from pathlib import Path
 from unittest import mock
 
 import support
+
+if support.sys.platform != "win32":
+    raise unittest.SkipTest("the Windows backend; its tests need Windows")
 from test_unit import FakeSession, request
 
 from joshua import JoshuaError, config, network
