@@ -31,7 +31,6 @@ $env:JOSHUA_LIVE = "1"; python -m unittest discover -s tests -p test_live.py -v
 
 ## Rules
 
-- Standard library only.
 - Ask the user before running anything that suspends a process (a game with
   `"hold": "freeze"`) or plays a real game. Antivirus software may object; see
   README.md.
