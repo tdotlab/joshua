@@ -328,8 +328,10 @@ python -m playwright install chromium --only-shell
 ```
 
 Chromium goes to `%LOCALAPPDATA%\ms-playwright` (on Linux,
-`~/.cache/ms-playwright`). On Debian or Ubuntu add `--with-deps` to the second
-command, or install `libatomic1`. If Joshua is registered with one Python and
+`~/.cache/ms-playwright`). On Debian or Ubuntu, install `libatomic1` first
+(`apt-get install libatomic1`; slim images lack it and Playwright cannot run
+without it), and add `--with-deps` to the second command for Chromium's
+libraries. If Joshua is registered with one Python and
 Playwright installed in another (a virtual environment, say), point the MCP
 registration at that environment's `python`.
 

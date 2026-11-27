@@ -421,7 +421,8 @@ class BrowserSession:
         try:
             self._pw = sync_playwright().start()
         except Exception as error:
-            raise _DriverFailed(f"Playwright's driver did not start: {_clip(str(error), 300)}") from None
+            hint = "" if sys.platform == "win32" else " (on Debian or Ubuntu it needs libatomic1)"
+            raise _DriverFailed(f"Playwright's driver did not start{hint}: {_clip(str(error), 300)}") from None
         self._roots = [pid for pid in proctree.children(os.getpid()) if pid not in before]
         self._seen.update({pid: proctree.started(pid) for pid in self._roots})
         threading.Thread(target=self._watch, name="joshua-browser-watch", daemon=True).start()
@@ -661,7 +662,7 @@ def _launch_failure(error):
     text = getattr(error, "message", None) or str(error)
     if "Executable doesn't exist" in text:
         return ("Playwright's Chromium is not installed: python -m playwright install chromium --only-shell"
-                " (on Debian or Ubuntu, add --with-deps or install libatomic1)")
+                " (on Debian or Ubuntu, install libatomic1 first and add --with-deps)")
     if "sandbox" in text.lower():
         return ("Chromium could not start its sandbox on this machine (often: user namespaces are restricted)."
                 f" If this machine is itself a throwaway sandbox, the user can set {NO_SANDBOX}=1. Details: "
